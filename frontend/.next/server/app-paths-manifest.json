@@ -1,0 +1,8 @@
+{
+  "/(public)/login/page": "app/(public)/login/page.js",
+  "/auth/callback/page": "app/auth/callback/page.js",
+  "/(protected)/dashboard/page": "app/(protected)/dashboard/page.js",
+  "/(protected)/interview-admin/page": "app/(protected)/interview-admin/page.js",
+  "/(protected)/interview/page": "app/(protected)/interview/page.js",
+  "/(protected)/dashboard/settings/page": "app/(protected)/dashboard/settings/page.js"
+}
