@@ -145,21 +145,44 @@ export default function InterviewAdminPage() {
 
   // Update main video element (remote stream)
   useEffect(() => {
-    if (mainVideoRef.current && remoteStream) {
+    if (mainVideoRef.current && remoteStream && remoteStream.getTracks().length > 0) {
       console.log("🎥 Admin: Remote stream video element'e set ediliyor", remoteStream);
-      console.log("🎥 Remote stream tracks:", remoteStream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, id: t.id })));
-      mainVideoRef.current.srcObject = remoteStream;
+      console.log("🎥 Remote stream tracks:", remoteStream.getTracks().map(t => ({ 
+        kind: t.kind, 
+        enabled: t.enabled, 
+        id: t.id,
+        readyState: t.readyState,
+        muted: t.muted
+      })));
+      
+      // Video element'e stream'i set et
+      if (mainVideoRef.current.srcObject !== remoteStream) {
+        mainVideoRef.current.srcObject = remoteStream;
+        console.log("✅ Video element srcObject set edildi");
+      }
+      
+      // Video'yu oynat
       const playPromise = mainVideoRef.current.play();
       if (playPromise !== undefined) {
         playPromise
-          .then(() => console.log("✅ Remote video oynatılıyor"))
+          .then(() => {
+            console.log("✅ Remote video oynatılıyor");
+            console.log("📊 Video element durumu:", {
+              paused: mainVideoRef.current?.paused,
+              readyState: mainVideoRef.current?.readyState,
+              videoWidth: mainVideoRef.current?.videoWidth,
+              videoHeight: mainVideoRef.current?.videoHeight
+            });
+          })
           .catch((err) => {
             console.error("❌ Remote video autoplay prevented:", err);
           });
       }
-    } else if (mainVideoRef.current && !remoteStream) {
-      console.log("⚠️ Admin: Remote stream yok, video temizleniyor");
-      mainVideoRef.current.srcObject = null;
+    } else if (mainVideoRef.current && (!remoteStream || remoteStream.getTracks().length === 0)) {
+      console.log("⚠️ Admin: Remote stream yok veya track yok, video temizleniyor");
+      if (mainVideoRef.current.srcObject) {
+        mainVideoRef.current.srcObject = null;
+      }
     }
   }, [remoteStream]);
 
@@ -228,12 +251,18 @@ export default function InterviewAdminPage() {
             className="relative bg-gray-900 rounded-lg overflow-hidden flex items-center justify-center mx-auto max-w-4xl w-full"
             style={{ aspectRatio: "16/9" }}
           >
-            {remoteStream ? (
+            {remoteStream && remoteStream.getTracks().length > 0 ? (
               <video
                 ref={mainVideoRef}
                 autoPlay
                 playsInline
+                muted={false}
                 className="absolute inset-0 w-full h-full object-cover"
+                style={{ display: "block" }}
+                onLoadedMetadata={() => console.log("✅ Remote video metadata yüklendi")}
+                onCanPlay={() => console.log("✅ Remote video oynatılabilir")}
+                onPlay={() => console.log("✅ Remote video oynatılıyor")}
+                onError={(e) => console.error("❌ Remote video hatası:", e)}
               />
             ) : (
               <div className="text-center text-white px-6">
@@ -250,7 +279,10 @@ export default function InterviewAdminPage() {
                   <p className="text-red-400 text-sm mt-2">⚠ {connectionError}</p>
                 )}
                 {isConnected && !connectionError && (
-                  <p className="text-green-400 text-sm mt-2">● Bağlı</p>
+                  <p className="text-green-400 text-sm mt-2">● Bağlı - Video bekleniyor...</p>
+                )}
+                {!isConnected && (
+                  <p className="text-yellow-400 text-sm mt-2">⏳ WebRTC bağlantısı kuruluyor...</p>
                 )}
               </div>
             )}

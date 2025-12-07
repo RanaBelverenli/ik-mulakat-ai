@@ -53,12 +53,39 @@ export function useWebRTC({ localStream, onRemoteStream }: UseWebRTCOptions) {
       console.log("🎥 Remote stream alındı!", event);
       console.log("Streams:", event.streams);
       console.log("Track:", event.track);
+      console.log("Track kind:", event.track.kind);
+      console.log("Track enabled:", event.track.enabled);
+      console.log("Track readyState:", event.track.readyState);
+      
       const stream = event.streams[0] || new MediaStream([event.track]);
-      console.log("Remote stream tracks:", stream.getTracks());
+      console.log("Remote stream tracks:", stream.getTracks().map(t => ({ 
+        kind: t.kind, 
+        enabled: t.enabled, 
+        id: t.id,
+        readyState: t.readyState 
+      })));
+      
+      // Stream'i set et
       setRemoteStream(stream);
+      console.log("✅ Remote stream state'e set edildi");
+      
       if (onRemoteStream) {
+        console.log("✅ onRemoteStream callback çağrılıyor");
         onRemoteStream(stream);
       }
+      
+      // Track state değişikliklerini dinle
+      event.track.onended = () => {
+        console.log("⚠️ Remote track sonlandı:", event.track.kind);
+      };
+      
+      event.track.onmute = () => {
+        console.log("⚠️ Remote track sessize alındı:", event.track.kind);
+      };
+      
+      event.track.onunmute = () => {
+        console.log("✅ Remote track ses açıldı:", event.track.kind);
+      };
     };
 
     // ICE candidate'ları işle
@@ -149,12 +176,34 @@ export function useWebRTC({ localStream, onRemoteStream }: UseWebRTCOptions) {
 
   // ICE candidate ekle
   const addIceCandidate = useCallback(async (candidate: RTCIceCandidateInit) => {
-    if (!peerConnectionRef.current) return;
+    if (!peerConnectionRef.current) {
+      console.warn("⚠️ Peer connection yok, ICE candidate eklenemedi");
+      return;
+    }
 
     try {
-      await peerConnectionRef.current.addIceCandidate(candidate);
+      // Eğer remote description henüz set edilmediyse, candidate'ı beklet
+      if (peerConnectionRef.current.remoteDescription === null) {
+        console.log("⏳ Remote description yok, ICE candidate bekletiliyor...");
+        // Candidate'ı geçici olarak sakla ve remote description set edildikten sonra ekle
+        // Bu durumda browser otomatik olarak handle eder, ama log için bekleyelim
+        setTimeout(async () => {
+          if (peerConnectionRef.current && peerConnectionRef.current.remoteDescription) {
+            await peerConnectionRef.current.addIceCandidate(candidate);
+            console.log("✅ ICE candidate eklendi (gecikmeli)");
+          }
+        }, 100);
+      } else {
+        await peerConnectionRef.current.addIceCandidate(candidate);
+        console.log("✅ ICE candidate eklendi");
+      }
     } catch (error) {
-      console.error("ICE candidate ekleme hatası:", error);
+      // Ignore error if candidate already added or invalid
+      if (error instanceof Error && error.message.includes("already")) {
+        console.log("ℹ️ ICE candidate zaten eklenmiş");
+      } else {
+        console.error("❌ ICE candidate ekleme hatası:", error);
+      }
     }
   }, []);
 
@@ -187,7 +236,12 @@ export function useWebRTC({ localStream, onRemoteStream }: UseWebRTCOptions) {
             console.log("✅ Remote description set edilecek");
             hasReceivedAnswerRef.current = true;
             peerConnectionRef.current.setRemoteDescription(message.data)
-              .then(() => console.log("✅ Remote description set edildi"))
+              .then(() => {
+                console.log("✅ Remote description set edildi");
+                console.log("📊 Peer connection senders:", peerConnectionRef.current?.getSenders().length);
+                console.log("📊 Peer connection receivers:", peerConnectionRef.current?.getReceivers().length);
+                console.log("📊 Peer connection transceivers:", peerConnectionRef.current?.getTransceivers().length);
+              })
               .catch((err) => console.error("❌ Remote description set hatası:", err));
           } else {
             console.log("⚠️ Answer zaten işlendi veya initiator değil");
@@ -195,8 +249,10 @@ export function useWebRTC({ localStream, onRemoteStream }: UseWebRTCOptions) {
           break;
 
         case "ice-candidate":
-          console.log("🧊 ICE candidate alındı");
-          addIceCandidate(message.data);
+          console.log("🧊 ICE candidate alındı:", message.data);
+          addIceCandidate(message.data)
+            .then(() => console.log("✅ ICE candidate eklendi"))
+            .catch((err) => console.error("❌ ICE candidate ekleme hatası:", err));
           break;
 
         default:
