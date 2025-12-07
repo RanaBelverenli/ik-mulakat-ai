@@ -25,10 +25,13 @@ app.add_middleware(
 )
 
 # TODO: Include routers
+# from app.api.v1 import auth, candidates, interviews, audio_stream
+from app.api.v1 import signaling
+
 # app.include_router(auth.router, prefix="/api/v1")
 # app.include_router(candidates.router, prefix="/api/v1")
 # app.include_router(interviews.router, prefix="/api/v1")
-# app.include_router(signaling.router, prefix="/api/v1")
+app.include_router(signaling.router, prefix="/api/v1")
 # app.include_router(audio_stream.router, prefix="/api/v1")
 
 

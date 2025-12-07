@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { useWebRTC } from "@/webrtc/useWebRTC";
+
 export default function InterviewRoomPage() {
   const router = useRouter();
   const [duration, setDuration] = useState(0); // seconds
@@ -11,6 +13,17 @@ export default function InterviewRoomPage() {
   const [videoError, setVideoError] = useState<string | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+
+  // WebRTC bağlantısı
+  const { remoteStream, isConnected, connectionError } = useWebRTC({
+    localStream,
+    onRemoteStream: (stream) => {
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = stream;
+      }
+    },
+  });
 
   // Süreyi otomatik başlat
   useEffect(() => {
@@ -91,7 +104,7 @@ export default function InterviewRoomPage() {
     }
   }, [isVideoOn, localStream]);
 
-  // Update video element when stream is available
+  // Update local video element when stream is available
   useEffect(() => {
     if (videoRef.current) {
       if (localStream && isVideoOn) {
@@ -108,6 +121,26 @@ export default function InterviewRoomPage() {
       }
     }
   }, [localStream, isVideoOn]);
+
+  // Update remote video element when remote stream is available
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream) {
+      console.log("🎥 Kullanıcı: Remote stream video element'e set ediliyor", remoteStream);
+      console.log("🎥 Remote stream tracks:", remoteStream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, id: t.id })));
+      remoteVideoRef.current.srcObject = remoteStream;
+      const playPromise = remoteVideoRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => console.log("✅ Remote video oynatılıyor"))
+          .catch((err) => {
+            console.error("❌ Remote video autoplay prevented:", err);
+          });
+      }
+    } else if (remoteVideoRef.current && !remoteStream) {
+      console.log("⚠️ Kullanıcı: Remote stream yok, video temizleniyor");
+      remoteVideoRef.current.srcObject = null;
+    }
+  }, [remoteStream]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -188,17 +221,32 @@ export default function InterviewRoomPage() {
             <div>
               <p className="text-sm uppercase tracking-widest text-purple-500 font-semibold">Görüşmeci Görüntüsü</p>
               <h3 className="text-xl font-semibold text-gray-900 mt-1">AI Mülakat Asistanı</h3>
+              {isConnected && (
+                <p className="text-xs text-green-600 mt-1">● Bağlı</p>
+              )}
+              {connectionError && (
+                <p className="text-xs text-red-600 mt-1">⚠ {connectionError}</p>
+              )}
             </div>
             <div className="relative bg-gray-900 rounded-2xl overflow-hidden flex-1 aspect-video">
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-white text-center px-6">
-                <div className="w-20 h-20 bg-purple-600 rounded-full flex items-center justify-center mb-4 text-2xl font-semibold">
-                  AI
+              {remoteStream ? (
+                <video
+                  ref={remoteVideoRef}
+                  autoPlay
+                  playsInline
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
+              ) : (
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-white text-center px-6">
+                  <div className="w-20 h-20 bg-purple-600 rounded-full flex items-center justify-center mb-4 text-2xl font-semibold">
+                    AI
+                  </div>
+                  <p className="text-lg font-semibold">Görüşmeci yayında</p>
+                  <p className="text-sm text-white/70 mt-1">
+                    {isConnected ? "Görüşmeci bağlanıyor..." : "Görüşmeci sorularını aktarmak için hazır bekliyor."}
+                  </p>
                 </div>
-                <p className="text-lg font-semibold">Görüşmeci yayında</p>
-                <p className="text-sm text-white/70 mt-1">
-                  Görüşmeci sorularını aktarmak için hazır bekliyor.
-                </p>
-              </div>
+              )}
             </div>
             <div className="text-sm text-gray-500">
               Gerçek görüşme senaryosunda, mülakatı yapan kişinin kamerası bu alanda yayınlanır.

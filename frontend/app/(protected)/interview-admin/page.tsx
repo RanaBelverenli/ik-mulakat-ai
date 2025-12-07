@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useWebRTC } from "@/webrtc/useWebRTC";
 
 export default function InterviewAdminPage() {
   const router = useRouter();
@@ -16,6 +17,16 @@ export default function InterviewAdminPage() {
   const [audioError, setAudioError] = useState<string | null>(null);
   const mainVideoRef = useRef<HTMLVideoElement | null>(null);
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
+
+  // WebRTC bağlantısı
+  const { remoteStream, isConnected, connectionError } = useWebRTC({
+    localStream,
+    onRemoteStream: (stream) => {
+      if (mainVideoRef.current) {
+        mainVideoRef.current.srcObject = stream;
+      }
+    },
+  });
 
   useEffect(() => {
     if (isInterviewStarted) {
@@ -114,26 +125,43 @@ export default function InterviewAdminPage() {
     }
   }, [isVideoOn, localStream]);
 
-  // Update video elements when stream is available
+  // Update preview video element (local stream)
   useEffect(() => {
-    const refs = [mainVideoRef.current, previewVideoRef.current];
-    refs.forEach((videoEl) => {
-      if (videoEl) {
-        if (localStream && isVideoOn) {
-          videoEl.srcObject = localStream;
-          const playPromise = videoEl.play();
-          if (playPromise !== undefined) {
-            playPromise.catch((err) => {
-              console.warn("Video autoplay prevented:", err);
-            });
-          }
-        } else {
-          videoEl.pause();
-          videoEl.srcObject = null;
+    if (previewVideoRef.current) {
+      if (localStream && isVideoOn) {
+        previewVideoRef.current.srcObject = localStream;
+        const playPromise = previewVideoRef.current.play();
+        if (playPromise !== undefined) {
+          playPromise.catch((err) => {
+            console.warn("Video autoplay prevented:", err);
+          });
         }
+      } else {
+        previewVideoRef.current.pause();
+        previewVideoRef.current.srcObject = null;
       }
-    });
+    }
   }, [localStream, isVideoOn]);
+
+  // Update main video element (remote stream)
+  useEffect(() => {
+    if (mainVideoRef.current && remoteStream) {
+      console.log("🎥 Admin: Remote stream video element'e set ediliyor", remoteStream);
+      console.log("🎥 Remote stream tracks:", remoteStream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, id: t.id })));
+      mainVideoRef.current.srcObject = remoteStream;
+      const playPromise = mainVideoRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => console.log("✅ Remote video oynatılıyor"))
+          .catch((err) => {
+            console.error("❌ Remote video autoplay prevented:", err);
+          });
+      }
+    } else if (mainVideoRef.current && !remoteStream) {
+      console.log("⚠️ Admin: Remote stream yok, video temizleniyor");
+      mainVideoRef.current.srcObject = null;
+    }
+  }, [remoteStream]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -200,13 +228,32 @@ export default function InterviewAdminPage() {
             className="relative bg-gray-900 rounded-lg overflow-hidden flex items-center justify-center mx-auto max-w-4xl w-full"
             style={{ aspectRatio: "16/9" }}
           >
-            <div className="text-center text-white px-6">
-              <div className="w-24 h-24 bg-purple-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl font-semibold">
-                AI
+            {remoteStream ? (
+              <video
+                ref={mainVideoRef}
+                autoPlay
+                playsInline
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+            ) : (
+              <div className="text-center text-white px-6">
+                <div className="w-24 h-24 bg-purple-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl font-semibold">
+                  AI
+                </div>
+                <h2 className="text-2xl font-semibold">
+                  {isConnected ? "Aday bağlanıyor..." : "Aday Bağlantı Bekleniyor"}
+                </h2>
+                <p className="text-gray-300 text-sm mt-2">
+                  {isConnected ? "Kamera akışı yükleniyor..." : "Adayın bağlanmasını bekliyorum."}
+                </p>
+                {connectionError && (
+                  <p className="text-red-400 text-sm mt-2">⚠ {connectionError}</p>
+                )}
+                {isConnected && !connectionError && (
+                  <p className="text-green-400 text-sm mt-2">● Bağlı</p>
+                )}
               </div>
-              <h2 className="text-2xl font-semibold">Görüşmeci Bağlı</h2>
-              <p className="text-gray-300 text-sm mt-2">Kamera akışı alt kısımda gösteriliyor.</p>
-            </div>
+            )}
           </div>
 
           <div className="flex flex-col lg:flex-row items-center justify-center gap-6 flex-shrink-0">

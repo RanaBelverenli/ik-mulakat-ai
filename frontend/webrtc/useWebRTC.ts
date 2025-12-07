@@ -1,11 +1,298 @@
 /**
  * WebRTC Hook
+ * Peer-to-peer video/audio bağlantısı yönetir
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { SignalingClient, SignalingMessage } from "./signalingClient";
 
-export function useWebRTC() {
-  // Implementation
-  return {};
+const ROOM_ID = "interview-room-1"; // Sabit room ID - gerçek uygulamada dinamik olmalı
+
+interface UseWebRTCOptions {
+  localStream: MediaStream | null;
+  onRemoteStream?: (stream: MediaStream) => void;
 }
 
+export function useWebRTC({ localStream, onRemoteStream }: UseWebRTCOptions) {
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const signalingClientRef = useRef<SignalingClient | null>(null);
+  const isInitiatorRef = useRef(false);
+  const hasReceivedOfferRef = useRef(false);
+  const hasReceivedAnswerRef = useRef(false);
+
+  // WebRTC yapılandırması
+  const rtcConfiguration: RTCConfiguration = {
+    iceServers: [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" },
+    ],
+  };
+
+  // Peer connection oluştur
+  const createPeerConnection = useCallback(() => {
+    const pc = new RTCPeerConnection(rtcConfiguration);
+
+    // Local stream'i peer connection'a ekle
+    if (localStream) {
+      console.log("📹 Local stream peer connection'a ekleniyor");
+      localStream.getTracks().forEach((track) => {
+        console.log("📹 Track ekleniyor:", track.kind, track.id, track.enabled);
+        pc.addTrack(track, localStream);
+      });
+      console.log("📹 Local stream tracks eklendi. Toplam senders:", pc.getSenders().length);
+    } else {
+      console.warn("⚠️ Local stream yok, peer connection'a eklenemedi");
+    }
+
+    // Remote stream'i al
+    pc.ontrack = (event) => {
+      console.log("🎥 Remote stream alındı!", event);
+      console.log("Streams:", event.streams);
+      console.log("Track:", event.track);
+      const stream = event.streams[0] || new MediaStream([event.track]);
+      console.log("Remote stream tracks:", stream.getTracks());
+      setRemoteStream(stream);
+      if (onRemoteStream) {
+        onRemoteStream(stream);
+      }
+    };
+
+    // ICE candidate'ları işle
+    pc.onicecandidate = (event) => {
+      if (event.candidate && signalingClientRef.current) {
+        console.log("🧊 ICE candidate oluşturuldu:", event.candidate);
+        signalingClientRef.current.send({
+          type: "ice-candidate",
+          data: event.candidate,
+        });
+      } else if (!event.candidate) {
+        console.log("🧊 ICE candidate toplama tamamlandı");
+      }
+    };
+
+    // ICE connection state değişikliklerini takip et
+    pc.oniceconnectionstatechange = () => {
+      console.log("🧊 ICE connection state:", pc.iceConnectionState);
+    };
+
+    // Connection state değişikliklerini takip et
+    pc.onconnectionstatechange = () => {
+      const state = pc.connectionState;
+      console.log("Connection state:", state);
+      setIsConnected(state === "connected");
+      
+      if (state === "failed" || state === "disconnected") {
+        setConnectionError("Bağlantı kesildi");
+      } else {
+        setConnectionError(null);
+      }
+    };
+
+    return pc;
+  }, [localStream, onRemoteStream]);
+
+  // Offer oluştur ve gönder
+  const createOffer = useCallback(async () => {
+    if (!peerConnectionRef.current || !signalingClientRef.current) {
+      console.error("❌ Peer connection veya signaling client yok");
+      return;
+    }
+
+    try {
+      console.log("📤 Offer oluşturuluyor...");
+      const offer = await peerConnectionRef.current.createOffer();
+      console.log("📤 Offer oluşturuldu:", offer);
+      await peerConnectionRef.current.setLocalDescription(offer);
+      console.log("📤 Local description set edildi");
+      
+      signalingClientRef.current.send({
+        type: "offer",
+        data: offer,
+      });
+      console.log("📤 Offer gönderildi");
+    } catch (error) {
+      console.error("❌ Offer oluşturma hatası:", error);
+      setConnectionError("Bağlantı kurulamadı");
+    }
+  }, []);
+
+  // Answer oluştur ve gönder
+  const createAnswer = useCallback(async (offer: RTCSessionDescriptionInit) => {
+    if (!peerConnectionRef.current || !signalingClientRef.current) {
+      console.error("❌ Peer connection veya signaling client yok");
+      return;
+    }
+
+    try {
+      console.log("📥 Offer alındı, answer oluşturuluyor...", offer);
+      await peerConnectionRef.current.setRemoteDescription(offer);
+      console.log("📥 Remote description set edildi");
+      const answer = await peerConnectionRef.current.createAnswer();
+      console.log("📥 Answer oluşturuldu:", answer);
+      await peerConnectionRef.current.setLocalDescription(answer);
+      console.log("📥 Local description set edildi");
+      
+      signalingClientRef.current.send({
+        type: "answer",
+        data: answer,
+      });
+      console.log("📥 Answer gönderildi");
+    } catch (error) {
+      console.error("❌ Answer oluşturma hatası:", error);
+      setConnectionError("Bağlantı kurulamadı");
+    }
+  }, []);
+
+  // ICE candidate ekle
+  const addIceCandidate = useCallback(async (candidate: RTCIceCandidateInit) => {
+    if (!peerConnectionRef.current) return;
+
+    try {
+      await peerConnectionRef.current.addIceCandidate(candidate);
+    } catch (error) {
+      console.error("ICE candidate ekleme hatası:", error);
+    }
+  }, []);
+
+  // Signaling mesajlarını işle
+  const handleSignalingMessage = useCallback(
+    (message: SignalingMessage) => {
+      console.log("📨 Signaling mesajı alındı:", message.type, message);
+      if (!peerConnectionRef.current) {
+        console.error("❌ Peer connection yok, mesaj işlenemiyor");
+        return;
+      }
+
+      switch (message.type) {
+        case "offer":
+          console.log("📥 Offer mesajı alındı. Initiator:", isInitiatorRef.current, "Has received offer:", hasReceivedOfferRef.current);
+          // Eğer daha önce offer almadıysak ve initiator değilsek, answer oluştur
+          if (!hasReceivedOfferRef.current && !isInitiatorRef.current) {
+            console.log("✅ Answer oluşturulacak");
+            hasReceivedOfferRef.current = true;
+            createAnswer(message.data);
+          } else {
+            console.log("⚠️ Offer zaten işlendi veya initiator bu");
+          }
+          break;
+
+        case "answer":
+          console.log("📥 Answer mesajı alındı. Initiator:", isInitiatorRef.current, "Has received answer:", hasReceivedAnswerRef.current);
+          // Eğer initiator isek ve daha önce answer almadıysak, remote description'ı set et
+          if (isInitiatorRef.current && !hasReceivedAnswerRef.current) {
+            console.log("✅ Remote description set edilecek");
+            hasReceivedAnswerRef.current = true;
+            peerConnectionRef.current.setRemoteDescription(message.data)
+              .then(() => console.log("✅ Remote description set edildi"))
+              .catch((err) => console.error("❌ Remote description set hatası:", err));
+          } else {
+            console.log("⚠️ Answer zaten işlendi veya initiator değil");
+          }
+          break;
+
+        case "ice-candidate":
+          console.log("🧊 ICE candidate alındı");
+          addIceCandidate(message.data);
+          break;
+
+        default:
+          console.log("⚠️ Bilinmeyen mesaj tipi:", message.type);
+          break;
+      }
+    },
+    [createAnswer, addIceCandidate]
+  );
+
+  // WebRTC bağlantısını başlat
+  useEffect(() => {
+    if (!localStream) return;
+
+    const initWebRTC = async () => {
+      try {
+        // Signaling client oluştur ve bağlan
+        const signalingClient = new SignalingClient(ROOM_ID);
+        signalingClientRef.current = signalingClient;
+
+        signalingClient.onMessage(handleSignalingMessage);
+
+        await signalingClient.connect();
+
+        // Peer connection oluştur
+        const pc = createPeerConnection();
+        peerConnectionRef.current = pc;
+
+        // Admin her zaman initiator olsun (ilk offer'ı oluşturur)
+        const isAdmin = window.location.pathname.includes("interview-admin");
+        isInitiatorRef.current = isAdmin;
+        hasReceivedOfferRef.current = false;
+        hasReceivedAnswerRef.current = false;
+
+        console.log("🔧 WebRTC başlatıldı. Admin:", isAdmin, "Initiator:", isInitiatorRef.current);
+        console.log("🔧 Local stream tracks:", localStream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, id: t.id })));
+
+        // Eğer initiator isek, offer oluştur
+        // Değilsek, diğer kullanıcının offer'ını bekleyelim
+        if (isInitiatorRef.current) {
+          console.log("⏳ Offer oluşturulmak için bekleniyor...");
+          // Kısa bir gecikme ile offer oluştur (diğer kullanıcının bağlanması için)
+          setTimeout(() => {
+            if (peerConnectionRef.current && !hasReceivedOfferRef.current) {
+              console.log("🚀 Offer oluşturuluyor...");
+              createOffer();
+            } else {
+              console.log("⚠️ Offer oluşturulamadı - peer connection yok veya offer zaten alındı");
+            }
+          }, 2000);
+        } else {
+          console.log("⏳ Offer bekleniyor...");
+        }
+      } catch (error) {
+        console.error("WebRTC başlatma hatası:", error);
+        setConnectionError("Bağlantı kurulamadı");
+      }
+    };
+
+    initWebRTC();
+
+    // Cleanup
+    return () => {
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
+      }
+      if (signalingClientRef.current) {
+        signalingClientRef.current.disconnect();
+        signalingClientRef.current = null;
+      }
+      setRemoteStream(null);
+      setIsConnected(false);
+    };
+  }, [localStream, createPeerConnection, handleSignalingMessage, createOffer]);
+
+  // Local stream değiştiğinde peer connection'ı güncelle
+  useEffect(() => {
+    if (!localStream || !peerConnectionRef.current) return;
+
+    // Mevcut track'leri kaldır
+    peerConnectionRef.current.getSenders().forEach((sender) => {
+      if (sender.track) {
+        peerConnectionRef.current?.removeTrack(sender);
+      }
+    });
+
+    // Yeni track'leri ekle
+    localStream.getTracks().forEach((track) => {
+      peerConnectionRef.current?.addTrack(track, localStream);
+    });
+  }, [localStream]);
+
+  return {
+    remoteStream,
+    isConnected,
+    connectionError,
+  };
+}
