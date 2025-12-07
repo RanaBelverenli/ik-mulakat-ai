@@ -3,8 +3,32 @@
  * WebSocket üzerinden WebRTC signaling mesajlarını yönetir
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const WS_URL = API_BASE_URL.replace("http://", "ws://").replace("https://", "wss://");
+// Production ve development için WebSocket URL'ini oluştur
+const getWebSocketUrl = () => {
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  
+  // Eğer production ortamındaysak (Vercel), HTTPS kullan
+  const isProduction = typeof window !== "undefined" && 
+    (window.location.protocol === "https:" || 
+     window.location.hostname !== "localhost");
+  
+  // URL'i normalize et
+  let baseUrl = API_BASE_URL.trim();
+  
+  // Trailing slash'i kaldır
+  if (baseUrl.endsWith("/")) {
+    baseUrl = baseUrl.slice(0, -1);
+  }
+  
+  // WebSocket protokolünü belirle
+  if (baseUrl.startsWith("https://") || isProduction) {
+    return baseUrl.replace("https://", "wss://").replace("http://", "wss://");
+  } else {
+    return baseUrl.replace("https://", "ws://").replace("http://", "ws://");
+  }
+};
+
+const WS_URL = getWebSocketUrl();
 
 export type SignalingMessage = {
   type: "offer" | "answer" | "ice-candidate" | "user-joined" | "user-left";
@@ -29,7 +53,13 @@ export class SignalingClient {
       try {
         // WebSocket URL'ini oluştur
         const wsUrl = `${WS_URL}/api/v1/signaling/ws/${this.roomId}`;
-        console.log("WebSocket bağlantısı kuruluyor:", wsUrl);
+        console.log("🔌 WebSocket bağlantısı kuruluyor:", wsUrl);
+        console.log("🔌 Environment:", {
+          API_URL: process.env.NEXT_PUBLIC_API_URL,
+          Protocol: typeof window !== "undefined" ? window.location.protocol : "unknown",
+          Hostname: typeof window !== "undefined" ? window.location.hostname : "unknown"
+        });
+        
         this.ws = new WebSocket(wsUrl);
 
         this.ws.onopen = () => {
@@ -54,15 +84,25 @@ export class SignalingClient {
           reject(error);
         };
 
-        this.ws.onclose = () => {
-          console.log("WebSocket bağlantısı kapandı");
-          // Otomatik yeniden bağlanmayı dene
-          if (this.reconnectAttempts < this.maxReconnectAttempts) {
+        this.ws.onclose = (event) => {
+          console.log("WebSocket bağlantısı kapandı", {
+            code: event.code,
+            reason: event.reason,
+            wasClean: event.wasClean
+          });
+          
+          // Eğer temiz bir kapanış değilse, yeniden bağlanmayı dene
+          if (!event.wasClean && this.reconnectAttempts < this.maxReconnectAttempts) {
             this.reconnectAttempts++;
+            const delay = this.reconnectDelay * this.reconnectAttempts;
+            console.log(`⏳ ${delay}ms sonra yeniden bağlanma denemesi ${this.reconnectAttempts}/${this.maxReconnectAttempts}`);
             setTimeout(() => {
-              console.log(`Yeniden bağlanma denemesi ${this.reconnectAttempts}/${this.maxReconnectAttempts}`);
-              this.connect().catch(console.error);
-            }, this.reconnectDelay * this.reconnectAttempts);
+              this.connect().catch((err) => {
+                console.error("❌ Yeniden bağlanma hatası:", err);
+              });
+            }, delay);
+          } else if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+            console.error("❌ Maksimum yeniden bağlanma denemesi aşıldı");
           }
         };
       } catch (error) {
