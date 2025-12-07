@@ -49,15 +49,11 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
-# TODO: Include routers
-# from app.api.v1 import auth, candidates, interviews, audio_stream
+# Import routers
 from app.api.v1 import signaling
 
-# app.include_router(auth.router, prefix="/api/v1")
-# app.include_router(candidates.router, prefix="/api/v1")
-# app.include_router(interviews.router, prefix="/api/v1")
-app.include_router(signaling.router, prefix="/api/v1")
-# app.include_router(audio_stream.router, prefix="/api/v1")
+# Include routers
+app.include_router(signaling.router, prefix="/api/v1", tags=["Signaling"])
 
 
 @app.get("/")
