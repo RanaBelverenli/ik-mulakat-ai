@@ -4,15 +4,11 @@
  */
 
 // Production ve development için WebSocket URL'ini oluştur
-const getWebSocketUrl = () => {
+// Render URL'si HTTPS ile başladığı için, onu güvenli WebSocket protokolüne (wss) çevir
+const getWebSocketUrl = (): string => {
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   
-  // Eğer production ortamındaysak (Vercel), HTTPS kullan
-  const isProduction = typeof window !== "undefined" && 
-    (window.location.protocol === "https:" || 
-     window.location.hostname !== "localhost");
-  
-  // URL'i normalize et
+  // URL'i normalize et - başında/sonunda boşlukları temizle
   let baseUrl = API_BASE_URL.trim();
   
   // Trailing slash'i kaldır
@@ -20,11 +16,35 @@ const getWebSocketUrl = () => {
     baseUrl = baseUrl.slice(0, -1);
   }
   
-  // WebSocket protokolünü belirle
-  if (baseUrl.startsWith("https://") || isProduction) {
-    return baseUrl.replace("https://", "wss://").replace("http://", "wss://");
+  // Production ortamını kontrol et (Vercel veya başka bir HTTPS host)
+  const isProduction = typeof window !== "undefined" && 
+    (window.location.protocol === "https:" || 
+     window.location.hostname !== "localhost" &&
+     window.location.hostname !== "127.0.0.1");
+  
+  // WebSocket protokolünü belirle:
+  // - HTTPS URL'leri -> WSS (güvenli WebSocket)
+  // - HTTP URL'leri -> WS (development için)
+  // - Production ortamında her zaman WSS kullan
+  if (baseUrl.startsWith("https://")) {
+    // Render veya başka bir HTTPS backend için WSS kullan
+    return baseUrl.replace("https://", "wss://");
+  } else if (baseUrl.startsWith("http://")) {
+    // Development için WS kullan, ama production ortamındaysak WSS'ye çevir
+    if (isProduction) {
+      // Production ortamında HTTP backend varsa (nadir), WSS'ye çevir
+      return baseUrl.replace("http://", "wss://");
+    } else {
+      // Development için WS kullan
+      return baseUrl.replace("http://", "ws://");
+    }
   } else {
-    return baseUrl.replace("https://", "ws://").replace("http://", "ws://");
+    // Protokol belirtilmemişse, production durumuna göre ekle
+    if (isProduction) {
+      return `wss://${baseUrl}`;
+    } else {
+      return `ws://${baseUrl}`;
+    }
   }
 };
 
