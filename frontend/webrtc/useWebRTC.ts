@@ -290,8 +290,12 @@ export function useWebRTC({ localStream, onRemoteStream }: UseWebRTCOptions) {
         const pc = createPeerConnection();
         peerConnectionRef.current = pc;
 
-        // Admin her zaman initiator olsun (ilk offer'ı oluşturur)
-        const isAdmin = window.location.pathname.includes("interview-admin");
+        // URL'den rol belirle: interview-admin = HR, interview = Aday
+        // Ayrıca URL parametresi ile de rol belirlenebilir: ?role=admin
+        const urlParams = new URLSearchParams(window.location.search);
+        const roleParam = urlParams.get("role");
+        const isAdmin = window.location.pathname.includes("interview-admin") || roleParam === "admin";
+        
         isInitiatorRef.current = isAdmin;
         hasReceivedOfferRef.current = false;
         hasReceivedAnswerRef.current = false;
@@ -299,21 +303,28 @@ export function useWebRTC({ localStream, onRemoteStream }: UseWebRTCOptions) {
         console.log("🔧 WebRTC başlatıldı. Admin:", isAdmin, "Initiator:", isInitiatorRef.current);
         console.log("🔧 Local stream tracks:", localStream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, id: t.id })));
 
-        // Eğer initiator isek, offer oluştur
-        // Değilsek, diğer kullanıcının offer'ını bekleyelim
+        // Admin (initiator) ise offer oluştur
+        // Aday ise bekle, ama 5 saniye içinde offer gelmezse kendisi offer oluştur (fallback)
         if (isInitiatorRef.current) {
-          console.log("⏳ Offer oluşturulmak için bekleniyor...");
-          // Kısa bir gecikme ile offer oluştur (diğer kullanıcının bağlanması için)
+          console.log("⏳ Admin - Offer oluşturulmak için bekleniyor...");
           setTimeout(() => {
             if (peerConnectionRef.current && !hasReceivedOfferRef.current) {
-              console.log("🚀 Offer oluşturuluyor...");
+              console.log("🚀 Admin - Offer oluşturuluyor...");
               createOffer();
             } else {
               console.log("⚠️ Offer oluşturulamadı - peer connection yok veya offer zaten alındı");
             }
           }, 2000);
         } else {
-          console.log("⏳ Offer bekleniyor...");
+          console.log("⏳ Aday - Offer bekleniyor...");
+          // Fallback: 5 saniye içinde offer gelmezse kendimiz offer oluşturalım
+          setTimeout(() => {
+            if (peerConnectionRef.current && !hasReceivedOfferRef.current && !hasReceivedAnswerRef.current) {
+              console.log("⚠️ 5 saniye geçti, offer gelmedi. Fallback: Kendimiz offer oluşturuyoruz...");
+              isInitiatorRef.current = true;
+              createOffer();
+            }
+          }, 5000);
         }
       } catch (error) {
         console.error("WebRTC başlatma hatası:", error);
