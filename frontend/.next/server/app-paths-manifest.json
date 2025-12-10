@@ -1,9 +1,0 @@
-{
-  "/(public)/page": "app/(public)/page.js",
-  "/(public)/login/page": "app/(public)/login/page.js",
-  "/(protected)/interview-info/page": "app/(protected)/interview-info/page.js",
-  "/(protected)/interview-report/page": "app/(protected)/interview-report/page.js",
-  "/(protected)/interview-admin/page": "app/(protected)/interview-admin/page.js",
-  "/(protected)/dashboard/settings/page": "app/(protected)/dashboard/settings/page.js",
-  "/(protected)/interview/page": "app/(protected)/interview/page.js"
-}
