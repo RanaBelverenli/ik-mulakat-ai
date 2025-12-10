@@ -320,24 +320,35 @@ export function useWebRTC({ localStream, onRemoteStream }: UseWebRTCOptions) {
   useEffect(() => {
     if (!localStream) return;
 
+    // Önceki bağlantıları temizle (çift bağlantı önleme)
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+    if (signalingClientRef.current) {
+      signalingClientRef.current.disconnect();
+      signalingClientRef.current = null;
+    }
+
+    // Başlangıç değerleri
+    isInitiatorRef.current = false;
+    hasReceivedOfferRef.current = false;
+    hasReceivedAnswerRef.current = false;
+
+    // ÖNCE Peer connection oluştur (mesajlar gelmeden önce hazır olsun)
+    const pc = createPeerConnection();
+    peerConnectionRef.current = pc;
+    console.log("🔧 Peer connection oluşturuldu");
+
     const initWebRTC = async () => {
       try {
-        // Signaling client oluştur ve bağlan
+        // SONRA Signaling client oluştur ve bağlan
         const signalingClient = new SignalingClient(ROOM_ID);
         signalingClientRef.current = signalingClient;
 
         signalingClient.onMessage(handleSignalingMessage);
 
         await signalingClient.connect();
-
-        // Peer connection oluştur
-        const pc = createPeerConnection();
-        peerConnectionRef.current = pc;
-
-        // Başlangıç değerleri - room-info mesajına göre güncellenecek
-        isInitiatorRef.current = false;
-        hasReceivedOfferRef.current = false;
-        hasReceivedAnswerRef.current = false;
 
         console.log("🔧 WebRTC başlatıldı. Diğer kullanıcı bekleniyor...");
         console.log("🔧 Local stream tracks:", localStream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, id: t.id })));
@@ -360,6 +371,7 @@ export function useWebRTC({ localStream, onRemoteStream }: UseWebRTCOptions) {
 
     // Cleanup
     return () => {
+      console.log("🧹 WebRTC cleanup");
       if (peerConnectionRef.current) {
         peerConnectionRef.current.close();
         peerConnectionRef.current = null;
@@ -371,7 +383,8 @@ export function useWebRTC({ localStream, onRemoteStream }: UseWebRTCOptions) {
       setRemoteStream(null);
       setIsConnected(false);
     };
-  }, [localStream, createPeerConnection, handleSignalingMessage, createOffer]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localStream]); // Sadece localStream değiştiğinde çalış
 
   // Local stream değiştiğinde peer connection'ı güncelle
   useEffect(() => {
