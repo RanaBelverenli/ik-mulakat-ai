@@ -46,7 +46,8 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
     logger.info(f"Client connected to room {room_id}. Total connections: {connection_count}")
     
     # Diğer kullanıcılara yeni kullanıcının katıldığını bildir
-    for connection in active_connections[room_id]:
+    # Set'in kopyasını al (iteration sırasında değişiklik hatası önlemek için)
+    for connection in list(active_connections.get(room_id, set())):
         if connection != websocket:
             try:
                 await connection.send_text(json.dumps({
@@ -77,11 +78,13 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
             elif message.get("type") == "pong":
                 continue  # Pong aldık, devam et
             
-            logger.info(f"Room {room_id}: Mesaj alındı - Tip: {message.get('type')}, Bağlantı sayısı: {len(active_connections[room_id])}")
+            current_connections = active_connections.get(room_id, set())
+            logger.info(f"Room {room_id}: Mesaj alındı - Tip: {message.get('type')}, Bağlantı sayısı: {len(current_connections)}")
             
             # Broadcast message to all other clients in the room
+            # Set'in kopyasını al (iteration sırasında değişiklik hatası önlemek için)
             sent_count = 0
-            for connection in active_connections[room_id]:
+            for connection in list(current_connections):
                 if connection != websocket:
                     try:
                         await connection.send_text(json.dumps(message))
@@ -102,19 +105,24 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
         ping_task.cancel()
         
         # Remove connection from room
-        active_connections[room_id].discard(websocket)
-        
-        # Diğer kullanıcılara kullanıcının ayrıldığını bildir
         if room_id in active_connections:
-            for connection in active_connections[room_id]:
+            active_connections[room_id].discard(websocket)
+            
+            # Diğer kullanıcılara kullanıcının ayrıldığını bildir
+            # Set'in kopyasını al (iteration sırasında değişiklik hatası önlemek için)
+            remaining_connections = list(active_connections.get(room_id, set()))
+            remaining_count = len(remaining_connections)
+            
+            for connection in remaining_connections:
                 try:
                     await connection.send_text(json.dumps({
                         "type": "user-left",
-                        "data": {"room_id": room_id, "user_count": len(active_connections[room_id])}
+                        "data": {"room_id": room_id, "user_count": remaining_count}
                     }))
                 except Exception:
                     pass
             
-            if not active_connections[room_id]:
+            # Odada kimse kalmadıysa odayı sil
+            if room_id in active_connections and not active_connections[room_id]:
                 del active_connections[room_id]
 
