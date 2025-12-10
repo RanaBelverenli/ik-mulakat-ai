@@ -220,6 +220,49 @@ export function useWebRTC({ localStream, onRemoteStream }: UseWebRTCOptions) {
   const handleSignalingMessage = useCallback(
     (message: SignalingMessage) => {
       console.log("📨 Signaling mesajı alındı:", message.type, message);
+      
+      // Ping/pong mesajlarını sessizce işle
+      if (message.type === "ping" || message.type === "pong") {
+        return;
+      }
+
+      // room-info mesajı - odaya ilk girdiğimizde gelir
+      if (message.type === "room-info") {
+        const userCount = message.data?.user_count || 0;
+        console.log(`📊 Oda bilgisi alındı. Odadaki kullanıcı sayısı: ${userCount}`);
+        
+        // Eğer odada sadece biz varsak, initiator olacağız
+        if (userCount === 1) {
+          console.log("👤 Odada tek kişiyiz, diğer kullanıcı beklenecek...");
+          isInitiatorRef.current = true;
+        }
+        return;
+      }
+
+      // user-joined mesajı - yeni kullanıcı odaya katıldığında gelir
+      if (message.type === "user-joined") {
+        const userCount = message.data?.user_count || 0;
+        console.log(`👥 Yeni kullanıcı katıldı! Odadaki kullanıcı sayısı: ${userCount}`);
+        
+        // Eğer odada 2 kişi olduysa ve biz initiator isek, offer oluştur
+        if (userCount >= 2 && isInitiatorRef.current && !hasReceivedOfferRef.current && !hasReceivedAnswerRef.current) {
+          console.log("🚀 2 kişi oldu, initiator olarak offer oluşturuyoruz...");
+          setTimeout(() => {
+            if (peerConnectionRef.current && !hasReceivedOfferRef.current) {
+              createOffer();
+            }
+          }, 500);
+        }
+        return;
+      }
+
+      // user-left mesajı
+      if (message.type === "user-left") {
+        console.log("👋 Kullanıcı ayrıldı:", message.data);
+        setConnectionError("Diğer kullanıcı ayrıldı");
+        return;
+      }
+
       if (!peerConnectionRef.current) {
         console.error("❌ Peer connection yok, mesaj işlenemiyor");
         return;
@@ -228,13 +271,14 @@ export function useWebRTC({ localStream, onRemoteStream }: UseWebRTCOptions) {
       switch (message.type) {
         case "offer":
           console.log("📥 Offer mesajı alındı. Initiator:", isInitiatorRef.current, "Has received offer:", hasReceivedOfferRef.current);
-          // Eğer daha önce offer almadıysak ve initiator değilsek, answer oluştur
-          if (!hasReceivedOfferRef.current && !isInitiatorRef.current) {
+          // Eğer daha önce offer almadıysak, answer oluştur
+          if (!hasReceivedOfferRef.current) {
             console.log("✅ Answer oluşturulacak");
             hasReceivedOfferRef.current = true;
+            isInitiatorRef.current = false; // Offer aldık, biz initiator değiliz
             createAnswer(message.data);
           } else {
-            console.log("⚠️ Offer zaten işlendi veya initiator bu");
+            console.log("⚠️ Offer zaten işlendi");
           }
           break;
 
@@ -269,7 +313,7 @@ export function useWebRTC({ localStream, onRemoteStream }: UseWebRTCOptions) {
           break;
       }
     },
-    [createAnswer, addIceCandidate]
+    [createAnswer, addIceCandidate, createOffer]
   );
 
   // WebRTC bağlantısını başlat
@@ -290,42 +334,22 @@ export function useWebRTC({ localStream, onRemoteStream }: UseWebRTCOptions) {
         const pc = createPeerConnection();
         peerConnectionRef.current = pc;
 
-        // URL'den rol belirle: interview-admin = HR, interview = Aday
-        // Ayrıca URL parametresi ile de rol belirlenebilir: ?role=admin
-        const urlParams = new URLSearchParams(window.location.search);
-        const roleParam = urlParams.get("role");
-        const isAdmin = window.location.pathname.includes("interview-admin") || roleParam === "admin";
-        
-        isInitiatorRef.current = isAdmin;
+        // Başlangıç değerleri - room-info mesajına göre güncellenecek
+        isInitiatorRef.current = false;
         hasReceivedOfferRef.current = false;
         hasReceivedAnswerRef.current = false;
 
-        console.log("🔧 WebRTC başlatıldı. Admin:", isAdmin, "Initiator:", isInitiatorRef.current);
+        console.log("🔧 WebRTC başlatıldı. Diğer kullanıcı bekleniyor...");
         console.log("🔧 Local stream tracks:", localStream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, id: t.id })));
 
-        // Admin (initiator) ise offer oluştur
-        // Aday ise bekle, ama 5 saniye içinde offer gelmezse kendisi offer oluştur (fallback)
-        if (isInitiatorRef.current) {
-          console.log("⏳ Admin - Offer oluşturulmak için bekleniyor...");
-          setTimeout(() => {
-            if (peerConnectionRef.current && !hasReceivedOfferRef.current) {
-              console.log("🚀 Admin - Offer oluşturuluyor...");
-              createOffer();
-            } else {
-              console.log("⚠️ Offer oluşturulamadı - peer connection yok veya offer zaten alındı");
-            }
-          }, 2000);
-        } else {
-          console.log("⏳ Aday - Offer bekleniyor...");
-          // Fallback: 5 saniye içinde offer gelmezse kendimiz offer oluşturalım
-          setTimeout(() => {
-            if (peerConnectionRef.current && !hasReceivedOfferRef.current && !hasReceivedAnswerRef.current) {
-              console.log("⚠️ 5 saniye geçti, offer gelmedi. Fallback: Kendimiz offer oluşturuyoruz...");
-              isInitiatorRef.current = true;
-              createOffer();
-            }
-          }, 5000);
-        }
+        // Fallback: 10 saniye içinde hiçbir şey olmazsa, kendimiz offer oluşturalım
+        setTimeout(() => {
+          if (peerConnectionRef.current && !hasReceivedOfferRef.current && !hasReceivedAnswerRef.current) {
+            console.log("⚠️ 10 saniye geçti. Fallback: Offer oluşturuyoruz...");
+            isInitiatorRef.current = true;
+            createOffer();
+          }
+        }, 10000);
       } catch (error) {
         console.error("WebRTC başlatma hatası:", error);
         setConnectionError("Bağlantı kurulamadı");
