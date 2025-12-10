@@ -1,9 +1,17 @@
 """
 FastAPI application entry point
 """
+import sys
+import os
+from pathlib import Path
+
+# Backend dizinini Python path'e ekle (Render deployment için)
+backend_dir = Path(__file__).resolve().parent.parent
+if str(backend_dir) not in sys.path:
+    sys.path.insert(0, str(backend_dir))
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import os
 import logging
 
 # Logging yapılandırması
