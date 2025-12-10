@@ -1,12 +1,19 @@
 """
 Application configuration settings
 """
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
 
 class Settings(BaseSettings):
     """Application settings"""
+    
+    # Pydantic v2 config
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra="ignore"
+    )
     
     # API Settings
     API_V1_STR: str = "/api/v1"
@@ -36,10 +43,6 @@ class Settings(BaseSettings):
     # File Storage
     AUDIO_STORAGE_PATH: str = "./data/audio"
     TEMP_STORAGE_PATH: str = "./data/temp"
-    
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
 
 
 settings = Settings()
