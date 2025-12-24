@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { SignalingClient, SignalingMessage } from "./signalingClient";
+import { createInterviewPeerConnection } from "@/lib/webrtc";
 
 const ROOM_ID = "interview-room-1"; // Sabit room ID - gerçek uygulamada dinamik olmalı
 
@@ -24,26 +25,10 @@ export function useWebRTC({ localStream, onRemoteStream }: UseWebRTCOptions) {
   const hasReceivedOfferRef = useRef(false);
   const hasReceivedAnswerRef = useRef(false);
 
-  // WebRTC yapılandırması - STUN sunucuları ile ağ bulma
-  const rtcConfiguration: RTCConfiguration = {
-    iceServers: [
-      // Google'ın ücretsiz STUN sunucuları - farklı ağlardaki cihazların birbirini bulması için kritik
-      { urls: "stun:stun.l.google.com:19302" },
-      { urls: "stun:stun1.l.google.com:19302" },
-      // Ek STUN sunucuları - yedek bağlantı için
-      { urls: "stun:stun2.l.google.com:19302" },
-      { urls: "stun:stun3.l.google.com:19302" },
-      { urls: "stun:stun4.l.google.com:19302" },
-      // Alternatif STUN sunucuları
-      { urls: "stun:stun.stunprotocol.org:3478" },
-    ],
-    // ICE candidate toplama stratejisi
-    iceCandidatePoolSize: 10,
-  };
-
-  // Peer connection oluştur
+  // Peer connection oluştur (merkezi TURN/STUN yapılandırması ile)
   const createPeerConnection = useCallback(() => {
-    const pc = new RTCPeerConnection(rtcConfiguration);
+    // createInterviewPeerConnection STUN + TURN sunucularını otomatik yapılandırır
+    const pc = createInterviewPeerConnection();
 
     // Local stream'i peer connection'a ekle
     if (localStream) {
