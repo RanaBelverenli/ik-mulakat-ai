@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { SignalingClient, SignalingMessage } from "./signalingClient";
-import { createInterviewPeerConnection } from "@/lib/webrtc";
+import { createInterviewPeerConnection, parseIceCandidateType, isTurnConfigured } from "@/lib/webrtc";
 
 const ROOM_ID = "interview-room-1"; // Sabit room ID - gerçek uygulamada dinamik olmalı
 
@@ -82,16 +82,40 @@ export function useWebRTC({ localStream, onRemoteStream }: UseWebRTCOptions) {
       };
     };
 
-    // ICE candidate'ları işle
+    // ICE candidate'ları işle - RAW candidate string'i logla
     pc.onicecandidate = (event) => {
-      if (event.candidate && signalingClientRef.current) {
-        console.log("🧊 ICE candidate oluşturuldu:", event.candidate);
-        signalingClientRef.current.send({
-          type: "ice-candidate",
-          data: event.candidate,
+      if (event.candidate) {
+        const candidateStr = event.candidate.candidate;
+        const candidateType = parseIceCandidateType(candidateStr);
+        
+        // RAW candidate string - typ relay olup olmadığını kontrol için kritik
+        console.log('🧊 ICE candidate RAW:', candidateStr);
+        console.log(`🧊 ICE candidate tipi: ${candidateType}`, {
+          protocol: event.candidate.protocol,
+          address: event.candidate.address,
+          port: event.candidate.port,
+          type: candidateType,
         });
-      } else if (!event.candidate) {
-        console.log("🧊 ICE candidate toplama tamamlandı");
+
+        // TURN (relay) candidate geldiğinde özel log
+        if (candidateType === 'relay') {
+          console.log('✅✅✅ TURN (relay) candidate bulundu! TURN çalışıyor!');
+        }
+
+        // Signaling ile gönder
+        if (signalingClientRef.current) {
+          signalingClientRef.current.send({
+            type: "ice-candidate",
+            data: event.candidate,
+          });
+        }
+      } else {
+        console.log("🧊 ICE candidate toplama bitti (end-of-candidates)");
+        
+        // TURN yapılandırması kontrolü
+        if (!isTurnConfigured()) {
+          console.warn("⚠️ TURN yapılandırılmamış - farklı ağlar arası bağlantı olmayabilir!");
+        }
       }
     };
 
