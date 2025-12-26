@@ -25,10 +25,10 @@ export function useWebRTC({ localStream, onRemoteStream }: UseWebRTCOptions) {
   const hasReceivedOfferRef = useRef(false);
   const hasReceivedAnswerRef = useRef(false);
 
-  // Peer connection oluştur (merkezi TURN/STUN yapılandırması ile)
-  const createPeerConnection = useCallback(() => {
-    // createInterviewPeerConnection STUN + TURN sunucularını otomatik yapılandırır
-    const pc = createInterviewPeerConnection();
+  // Peer connection oluştur (merkezi TURN/STUN yapılandırması ile - ASYNC)
+  const createPeerConnection = useCallback(async (): Promise<RTCPeerConnection> => {
+    // createInterviewPeerConnection Metered'dan TURN credentials alır (async)
+    const pc = await createInterviewPeerConnection();
 
     // Local stream'i peer connection'a ekle
     if (localStream) {
@@ -344,13 +344,15 @@ export function useWebRTC({ localStream, onRemoteStream }: UseWebRTCOptions) {
     hasReceivedOfferRef.current = false;
     hasReceivedAnswerRef.current = false;
 
-    // ÖNCE Peer connection oluştur (mesajlar gelmeden önce hazır olsun)
-    const pc = createPeerConnection();
-    peerConnectionRef.current = pc;
-    console.log("🔧 Peer connection oluşturuldu");
-
+    // IIFE - async initialization
     const initWebRTC = async () => {
       try {
+        // ÖNCE Peer connection oluştur (Metered'dan TURN credentials alınır - async)
+        console.log("🔧 Peer connection oluşturuluyor (Metered TURN credentials alınıyor)...");
+        const pc = await createPeerConnection();
+        peerConnectionRef.current = pc;
+        console.log("🔧 Peer connection oluşturuldu");
+
         // SONRA Signaling client oluştur ve bağlan
         const signalingClient = new SignalingClient(ROOM_ID);
         signalingClientRef.current = signalingClient;
