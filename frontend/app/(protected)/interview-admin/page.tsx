@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useWebRTC } from "@/webrtc/useWebRTC";
+import { LiveTranscriptPanel } from "@/components/LiveTranscriptPanel";
+
+// Mülakat oturum ID'si - gerçek uygulamada dinamik olmalı
+const SESSION_ID = "interview-room-1";
 
 export default function InterviewAdminPage() {
   const router = useRouter();
@@ -18,7 +22,7 @@ export default function InterviewAdminPage() {
   const mainVideoRef = useRef<HTMLVideoElement | null>(null);
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
 
-  // WebRTC bağlantısı
+  // WebRTC bağlantısı - STT etkin (admin/mülakatçı tarafında aday sesini yakalayacak)
   const { remoteStream, isConnected, connectionError } = useWebRTC({
     localStream,
     onRemoteStream: (stream) => {
@@ -26,6 +30,8 @@ export default function InterviewAdminPage() {
         mainVideoRef.current.srcObject = stream;
       }
     },
+    sessionId: SESSION_ID,
+    enableStt: true, // Mülakatçı tarafında STT etkin - aday sesi transkript edilecek
   });
 
   useEffect(() => {
@@ -218,12 +224,7 @@ export default function InterviewAdminPage() {
     setAudioError(null);
   };
 
-  const transcriptions = [
-    { speaker: "Görüşmeci", time: "00:23", text: "React konusundaki deneyimlerinizden bahseder misiniz?" },
-    { speaker: "Aday", time: "00:28", text: "3 yılı aşkın süredir React ile çalışıyorum ve kurumsal projeler yürütüyorum..." },
-    { speaker: "Aday", time: "00:35", text: "Redux ve TypeScript kullanarak büyük ölçekli uygulamalar geliştirdim." },
-    { speaker: "Görüşmeci", time: "00:42", text: "Harika. Durum yönetimini nasıl ele alıyorsunuz?" },
-  ];
+  // Sabit transcriptions kaldırıldı - artık LiveTranscriptPanel gerçek zamanlı veri alıyor
 
   return (
     <div className="h-screen bg-gray-50 flex overflow-hidden">
@@ -370,30 +371,8 @@ export default function InterviewAdminPage() {
 
       <div className="w-96 bg-gray-50 border-l border-gray-200 overflow-y-auto h-full">
         <div className="p-6 space-y-6">
-          <Card className="p-4 bg-white">
-            <div className="flex items-center gap-2 mb-4">
-              <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                />
-              </svg>
-              <h2 className="text-lg font-semibold text-gray-900">Canlı Transkript</h2>
-            </div>
-            <div className="space-y-3 max-h-64 overflow-y-auto">
-              {transcriptions.map((transcript, index) => (
-                <div key={index} className="text-sm">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-medium text-purple-600">{transcript.speaker}</span>
-                    <span className="text-gray-500 text-xs">({transcript.time})</span>
-                  </div>
-                  <p className="text-gray-700">{transcript.text}</p>
-                </div>
-              ))}
-            </div>
-          </Card>
+          {/* Canlı Transkript - WebSocket üzerinden gerçek zamanlı */}
+          <LiveTranscriptPanel sessionId={SESSION_ID} />
 
           <Card className="p-4 bg-white">
             <div className="flex items-center gap-2 mb-4">

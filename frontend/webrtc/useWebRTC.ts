@@ -6,21 +6,25 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { SignalingClient, SignalingMessage } from "./signalingClient";
 import { createInterviewPeerConnection, parseIceCandidateType, isTurnConfigured } from "@/lib/webrtc";
+import { SttClient, startCandidateStt } from "@/lib/stt";
 
 const ROOM_ID = "interview-room-1"; // Sabit room ID - gerçek uygulamada dinamik olmalı
 
 interface UseWebRTCOptions {
   localStream: MediaStream | null;
   onRemoteStream?: (stream: MediaStream) => void;
+  sessionId?: string; // STT için session ID
+  enableStt?: boolean; // STT'yi etkinleştir (sadece admin/mülakatçı tarafında)
 }
 
-export function useWebRTC({ localStream, onRemoteStream }: UseWebRTCOptions) {
+export function useWebRTC({ localStream, onRemoteStream, sessionId, enableStt = false }: UseWebRTCOptions) {
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const signalingClientRef = useRef<SignalingClient | null>(null);
+  const sttClientRef = useRef<SttClient | null>(null); // STT client referansı
   const isInitiatorRef = useRef(false);
   const hasReceivedOfferRef = useRef(false);
   const hasReceivedAnswerRef = useRef(false);
@@ -67,10 +71,28 @@ export function useWebRTC({ localStream, onRemoteStream }: UseWebRTCOptions) {
         console.log("✅ onRemoteStream callback çağrılıyor");
         onRemoteStream(stream);
       }
+
+      // STT: Audio track geldiğinde aday sesini backend'e gönder
+      if (event.track.kind === "audio" && enableStt && sessionId) {
+        console.log("🎤 [STT] Audio track alındı, STT başlatılıyor...");
+        
+        // Önceki STT client varsa durdur
+        if (sttClientRef.current) {
+          sttClientRef.current.stop();
+        }
+        
+        // Yeni STT client başlat
+        sttClientRef.current = startCandidateStt(stream, sessionId);
+      }
       
       // Track state değişikliklerini dinle
       event.track.onended = () => {
         console.log("⚠️ Remote track sonlandı:", event.track.kind);
+        // Audio track sonlandığında STT'yi durdur
+        if (event.track.kind === "audio" && sttClientRef.current) {
+          sttClientRef.current.stop();
+          sttClientRef.current = null;
+        }
       };
       
       event.track.onmute = () => {
@@ -391,11 +413,16 @@ export function useWebRTC({ localStream, onRemoteStream }: UseWebRTCOptions) {
         signalingClientRef.current.disconnect();
         signalingClientRef.current = null;
       }
+      // STT client'ı temizle
+      if (sttClientRef.current) {
+        sttClientRef.current.stop();
+        sttClientRef.current = null;
+      }
       setRemoteStream(null);
       setIsConnected(false);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localStream]); // Sadece localStream değiştiğinde çalış
+  }, [localStream, sessionId, enableStt]); // localStream, sessionId veya enableStt değiştiğinde çalış
 
   // Local stream değiştiğinde peer connection'ı güncelle
   useEffect(() => {
