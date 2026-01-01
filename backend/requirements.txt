@@ -8,4 +8,5 @@ passlib[bcrypt]==1.7.4
 python-multipart==0.0.6
 aiofiles==23.2.1
 google-genai>=0.1.0
+openai>=1.23.6
 # pydantic v2 fix - 2025-12-10
