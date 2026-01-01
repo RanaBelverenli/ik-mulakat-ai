@@ -77,7 +77,7 @@ async def transcribe_with_gemini_chunk(
         
         # 3) Dosyayı Gemini Files API ile yükle
         logger.debug("[Gemini STT] Dosya Gemini'ye yükleniyor...")
-        myfile = client.files.upload(path=tmp_path)
+        myfile = client.files.upload(file=tmp_path)
         logger.debug(f"[Gemini STT] Dosya yüklendi. File URI: {myfile.uri}")
         
         # 4) Gemini'den transkript iste
