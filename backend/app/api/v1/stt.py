@@ -7,8 +7,24 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from typing import Dict, List
 import asyncio
 import logging
+import sys
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# Backend root dizinini path'e ekle (services/gemini_stt.py için)
+backend_dir = Path(__file__).resolve().parent.parent.parent.parent
+if str(backend_dir) not in sys.path:
+    sys.path.insert(0, str(backend_dir))
+
+try:
+    from services.gemini_stt import transcribe_with_gemini_chunk
+except ImportError as e:
+    # Fallback: Eğer import başarısız olursa dummy fonksiyon kullan
+    logger.warning(f"[STT] Gemini STT import edilemedi: {e}, dummy fonksiyon kullanılıyor")
+    
+    async def transcribe_with_gemini_chunk(audio_bytes: bytes, suffix: str = ".webm", language: str = "tr") -> str:
+        return "[Gemini STT import hatası - GEMINI_API_KEY kontrol edin]"
 
 router = APIRouter()
 
@@ -25,29 +41,26 @@ def get_session_clients(session_id: str) -> List[WebSocket]:
 
 async def transcribe_bytes(data: bytes) -> str:
     """
-    Audio bytes'ı text'e çevir (STT)
-    
-    Şimdilik dummy implementation; ileride Whisper / OpenAI / Google STT
-    entegrasyonu buraya gelecek.
+    Audio bytes'ı text'e çevir (STT) - Gemini API kullanır
     
     Args:
         data: Audio bytes (webm/opus format)
     
     Returns:
-        Transcribed text
+        Transcribed text (Türkçe)
     """
-    # Dummy implementation - gerçek STT için burası değiştirilecek
-    # Örnek: OpenAI Whisper, Google Speech-to-Text, Azure Speech, vs.
-    
-    # Ses verisinin boyutuna göre basit bir dummy response
-    audio_length_seconds = len(data) / (16000 * 2)  # Yaklaşık hesaplama
-    
-    if audio_length_seconds < 1:
+    try:
+        # Gemini STT ile transkript et
+        text = await transcribe_with_gemini_chunk(
+            audio_bytes=data,
+            suffix=".webm",  # MediaRecorder audio/webm gönderiyor
+            language="tr",  # Türkçe
+        )
+        return text
+    except Exception as e:
+        logger.error(f"[STT] Gemini transkript hatası: {e}", exc_info=True)
+        # Hata durumunda boş string döndür (sistem çalışmaya devam eder)
         return ""
-    elif audio_length_seconds < 3:
-        return "[Konuşma algılandı - kısa segment]"
-    else:
-        return f"[STT Test: {audio_length_seconds:.1f} saniyelik ses verisi işlendi]"
 
 
 async def broadcast_transcript(session_id: str, role: str, text: str):
