@@ -73,22 +73,33 @@ async def broadcast_transcript(session_id: str, role: str, text: str):
         text: Transcribe edilmiş metin
     """
     clients = get_session_clients(session_id)
+    
+    if not clients:
+        logger.warning(f"[STT] No transcript clients connected for session: {session_id}")
+        return
+    
+    logger.info(f"[STT] Broadcasting transcript to {len(clients)} client(s): role={role}, text_length={len(text)}")
+    
     disconnected_clients = []
     
     for client in clients:
         try:
-            await client.send_json({
+            # Frontend'in beklediği format: { role, text }
+            message = {
                 "role": role,
                 "text": text,
-            })
+            }
+            await client.send_json(message)
+            logger.debug(f"[STT] Transcript sent to client: {message}")
         except Exception as e:
-            logger.warning(f"Transcript gönderim hatası: {e}")
+            logger.warning(f"[STT] Transcript gönderim hatası: {e}")
             disconnected_clients.append(client)
     
     # Bağlantısı kopan client'ları temizle
     for client in disconnected_clients:
         if client in clients:
             clients.remove(client)
+            logger.info(f"[STT] Disconnected client removed from session: {session_id}")
 
 
 @router.websocket("/ws/transcript")
@@ -152,42 +163,63 @@ async def stt_ws(
         role: "candidate" (Aday) veya "interviewer" (Görüşmeci)
     """
     await ws.accept()
-    logger.info(f"[STT WS] Yeni STT client bağlandı. Session: {session_id}, Role: {role}")
+    logger.info(f"[STT] WebSocket connected: session_id={session_id}, role={role}")
     
     audio_buffer = bytearray()
     
-    # Minimum buffer boyutu (yaklaşık 2-3 saniye ses)
-    MIN_BUFFER_SIZE = 16000 * 2 * 2  # 16kHz, 16-bit, 2 saniye
+    # Minimum buffer boyutu - 8000 bytes (kullanıcı isteği)
+    MIN_BUFFER_SIZE = 8000  # ~0.5 saniye ses (16kHz, 16-bit)
+    
+    chunk_count = 0
     
     try:
         while True:
             # Binary audio data al
             chunk = await ws.receive_bytes()
+            chunk_count += 1
             audio_buffer.extend(chunk)
             
-            logger.debug(f"[STT WS] Chunk alındı: {len(chunk)} bytes, Buffer: {len(audio_buffer)} bytes")
+            logger.info(f"[STT] Chunk received: {len(chunk)} bytes, Buffer: {len(audio_buffer)} bytes (chunk #{chunk_count})")
             
             # Yeterli veri biriktiğinde transcribe et
             if len(audio_buffer) >= MIN_BUFFER_SIZE:
+                buffer_size = len(audio_buffer)
+                logger.info(f"[STT] Buffer yeterli ({buffer_size} bytes), Gemini STT çağrılıyor...")
+                
+                # Gemini STT çağır
                 text = await transcribe_bytes(bytes(audio_buffer))
+                
+                # Buffer'ı temizle
                 audio_buffer.clear()
+                
+                logger.info(f"[STT] Gemini result: {text!r}")
                 
                 # Boş olmayan text'i broadcast et
                 if text and text.strip():
                     role_display = "Aday" if role == "candidate" else "Görüşmeci"
-                    logger.info(f"[STT WS] Transcript: [{role_display}] {text}")
+                    logger.info(f"[STT] Transcript: [{role_display}] {text}")
                     
+                    # Transcript client'larına gönder
                     await broadcast_transcript(session_id, role_display, text)
+                    logger.info(f"[STT] Transcript sent to client(s).")
+                else:
+                    logger.warning(f"[STT] Gemini boş text döndü, broadcast edilmedi")
                     
     except WebSocketDisconnect:
-        logger.info(f"[STT WS] Client ayrıldı. Session: {session_id}")
+        logger.info(f"[STT] WebSocket disconnected: session_id={session_id}")
     except Exception as e:
-        logger.error(f"[STT WS] Hata: {e}")
+        logger.exception(f"[STT] Unexpected error in STT WebSocket handler: {e}")
     finally:
         # Kalan buffer'ı işle
         if len(audio_buffer) > 0:
-            text = await transcribe_bytes(bytes(audio_buffer))
-            if text and text.strip():
-                role_display = "Aday" if role == "candidate" else "Görüşmeci"
-                await broadcast_transcript(session_id, role_display, text)
+            logger.info(f"[STT] Processing remaining buffer: {len(audio_buffer)} bytes")
+            try:
+                text = await transcribe_bytes(bytes(audio_buffer))
+                if text and text.strip():
+                    role_display = "Aday" if role == "candidate" else "Görüşmeci"
+                    logger.info(f"[STT] Final transcript: [{role_display}] {text}")
+                    await broadcast_transcript(session_id, role_display, text)
+                    logger.info(f"[STT] Final transcript sent to client(s).")
+            except Exception as e:
+                logger.exception(f"[STT] Error processing final buffer: {e}")
 

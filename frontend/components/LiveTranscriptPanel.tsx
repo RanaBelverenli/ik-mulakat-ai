@@ -73,7 +73,13 @@ export function LiveTranscriptPanel({ sessionId }: LiveTranscriptPanelProps) {
 
         const data = JSON.parse(event.data) as { role: string; text: string };
         
-        console.log('[Transcript] Mesaj alındı:', data);
+        console.log('[Transcript] Message received:', data);
+
+        // Transcript mesajı kontrolü
+        if (!data.role || !data.text) {
+          console.warn('[Transcript] Geçersiz mesaj formatı:', data);
+          return;
+        }
 
         const newItem: TranscriptItem = {
           id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -82,6 +88,7 @@ export function LiveTranscriptPanel({ sessionId }: LiveTranscriptPanelProps) {
           timestamp: new Date(),
         };
 
+        console.log('[Transcript] Yeni transcript item eklendi:', newItem);
         setItems((prev) => [...prev, newItem]);
       } catch (error) {
         console.error('[Transcript] Mesaj parse hatası:', error, event.data);

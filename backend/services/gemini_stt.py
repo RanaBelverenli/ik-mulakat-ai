@@ -81,13 +81,9 @@ async def transcribe_with_gemini_chunk(
         logger.debug(f"[Gemini STT] Dosya yüklendi. File URI: {myfile.uri}")
         
         # 4) Gemini'den transkript iste
-        prompt = (
-            "Bu ses kaydındaki Türkçe konuşmayı **sadece ham metin** olarak yaz. "
-            "Noktalama işaretleri ekle ama ek açıklama, çeviri veya özet verme. "
-            "Eğer konuşma yoksa veya anlaşılmıyorsa boş string döndür."
-        )
+        prompt = "Bu dosyada Türkçe konuşma var. Lütfen yalnızca düz transkript metnini döndür."
         
-        logger.debug(f"[Gemini STT] Transkript isteniyor (model: {GEMINI_MODEL})...")
+        logger.info(f"[Gemini STT] Transkript isteniyor (model: {GEMINI_MODEL}, audio_size: {len(audio_bytes)} bytes)...")
         result = client.models.generate_content(
             model=GEMINI_MODEL,
             contents=[
@@ -96,12 +92,18 @@ async def transcribe_with_gemini_chunk(
             ],
         )
         
-        # 5) Sonucu al ve temizle
-        text = (result.text or "").strip()
+        # 5) Sonucu parse et - response.candidates ve content.parts üzerinden
+        text = ""
+        if result.candidates:
+            for candidate in result.candidates:
+                if candidate.content and candidate.content.parts:
+                    for part in candidate.content.parts:
+                        if hasattr(part, 'text') and part.text:
+                            text += part.text
         
-        logger.info(f"[Gemini STT] Transkript alındı: {len(text)} karakter")
-        if text:
-            logger.debug(f"[Gemini STT] Metin: {text[:100]}...")  # İlk 100 karakter
+        text = text.strip()
+        
+        logger.info(f"[Gemini STT] Gemini text={text!r} (length: {len(text)})")
         
         # 6) Dosyayı Gemini'den sil (opsiyonel - storage tasarrufu için)
         try:
@@ -113,7 +115,7 @@ async def transcribe_with_gemini_chunk(
         return text
         
     except Exception as e:
-        logger.error(f"[Gemini STT] Transkript hatası: {e}", exc_info=True)
+        logger.exception("[Gemini STT] Gemini transcribe error")
         return ""
     
     finally:
