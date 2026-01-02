@@ -86,8 +86,20 @@ export default function InterviewAdminPage() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: "Unknown error" }));
-        throw new Error(errorData.detail || `HTTP ${response.status}`);
+        // Response body'yi oku
+        let errorData;
+        try {
+          const text = await response.text();
+          console.error("[Interview Admin] Backend error response:", {
+            status: response.status,
+            statusText: response.statusText,
+            body: text,
+          });
+          errorData = JSON.parse(text);
+        } catch (parseError) {
+          errorData = { detail: `HTTP ${response.status}: ${response.statusText}` };
+        }
+        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
       }
 
       const data = await response.json();
@@ -101,8 +113,19 @@ export default function InterviewAdminPage() {
       // Rapor sayfasına yönlendir
       router.push(`/interview-report?session_id=${data.id}`);
     } catch (error) {
-      console.error("[Interview Admin] Hata:", error);
-      alert("Mülakat raporu oluşturulurken bir hata oluştu. Lütfen tekrar deneyin.");
+      console.error("[Interview Admin] Hata detayları:", {
+        error,
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      
+      // Daha detaylı hata mesajı
+      let errorMessage = "Mülakat raporu oluşturulurken bir hata oluştu.";
+      if (error instanceof Error) {
+        errorMessage = error.message || errorMessage;
+      }
+      
+      alert(`${errorMessage}\n\nKonsolu kontrol edin (F12) daha fazla detay için.`);
     }
   };
 

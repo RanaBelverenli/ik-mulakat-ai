@@ -94,10 +94,17 @@ async def create_interview(payload: CreateInterviewRequest):
     try:
         # 1. Gemini ile rapor üret
         logger.info("[Interviews] Gemini raporu üretiliyor...")
-        report = generate_interview_report(
-            transcript=payload.transcript,
-            language=payload.language or "tr",
-        )
+        try:
+            report = generate_interview_report(
+                transcript=payload.transcript,
+                language=payload.language or "tr",
+            )
+        except (ValueError, RuntimeError, ImportError) as gemini_error:
+            logger.error(f"[Interviews] Gemini rapor hatası: {gemini_error}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Gemini rapor üretilemedi: {str(gemini_error)}",
+            )
         
         # 2. overall_score'u 0-100'den 0-10'a çevir
         overall_score = report.get("overall_score", 0)
