@@ -32,13 +32,12 @@ except ImportError as e:
     # Fallback: dummy fonksiyon
     def generate_interview_report(transcript: str, language: str = "tr"):
         return {
-            "overall_score": 50,
+            "overall_score": 0,
             "overall_comment": "[Gemini Report import hatası - GEMINI_API_KEY kontrol edin]",
-            "sentiment": {"positive": 33, "neutral": 34, "negative": 33},
+            "sentiment": {"positive": 0, "neutral": 0, "negative": 0},
             "key_topics": [],
             "strengths": [],
             "improvements": [],
-            "next_actions": {"technical_depth": [], "communication": [], "closing": []},
         }
 
 router = APIRouter()
@@ -126,12 +125,6 @@ class SentimentSchema(BaseModel):
     negative: int
 
 
-class NextActionsSchema(BaseModel):
-    technical_depth: List[str]
-    communication: List[str]
-    closing: List[str]
-
-
 class InterviewReportResponse(BaseModel):
     overall_score: int
     overall_comment: str
@@ -139,7 +132,6 @@ class InterviewReportResponse(BaseModel):
     key_topics: List[str]
     strengths: List[str]
     improvements: List[str]
-    next_actions: NextActionsSchema
 
 
 @router.post("/report", response_model=InterviewReportResponse)
@@ -163,13 +155,12 @@ async def generate_report(payload: InterviewReportRequest):
     if not payload.transcript or not payload.transcript.strip():
         logger.info("[AI] Boş transcript, boş rapor döndürülüyor")
         empty_report = {
-            "overall_score": 50,
-            "overall_comment": "Transkript bulunamadı.",
-            "sentiment": {"positive": 33, "neutral": 34, "negative": 33},
+            "overall_score": 0,
+            "overall_comment": "",
+            "sentiment": {"positive": 0, "neutral": 0, "negative": 0},
             "key_topics": [],
             "strengths": [],
             "improvements": [],
-            "next_actions": {"technical_depth": [], "communication": [], "closing": []},
         }
         return InterviewReportResponse(
             overall_score=empty_report["overall_score"],
@@ -178,7 +169,6 @@ async def generate_report(payload: InterviewReportRequest):
             key_topics=empty_report["key_topics"],
             strengths=empty_report["strengths"],
             improvements=empty_report["improvements"],
-            next_actions=NextActionsSchema(**empty_report["next_actions"]),
         )
     
     try:
@@ -200,7 +190,6 @@ async def generate_report(payload: InterviewReportRequest):
             key_topics=report_dict["key_topics"],
             strengths=report_dict["strengths"],
             improvements=report_dict["improvements"],
-            next_actions=NextActionsSchema(**report_dict["next_actions"]),
         )
         
     except ValueError as e:
