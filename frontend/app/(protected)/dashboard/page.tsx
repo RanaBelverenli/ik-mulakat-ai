@@ -22,11 +22,60 @@ export default function DashboardPage() {
   const [recentSessions, setRecentSessions] = useState<InterviewSession[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
 
+  // Supabase'den son seansları çek - TÜM HOOK'LAR ERKEN RETURN'DEN ÖNCE OLMALI
+  useEffect(() => {
+    const fetchRecentSessions = async () => {
+      try {
+        setSessionsLoading(true);
+        const { data, error } = await supabase
+          .from("interview_sessions")
+          .select("id, candidate_name, interview_date, score_10, status_label")
+          .order("interview_date", { ascending: false })
+          .limit(10);
+
+        if (error) {
+          console.error("[Dashboard] Supabase hatası:", error);
+          return;
+        }
+
+        if (data) {
+          setRecentSessions(data);
+        }
+      } catch (err) {
+        console.error("[Dashboard] Hata:", err);
+      } finally {
+        setSessionsLoading(false);
+      }
+    };
+
+    fetchRecentSessions();
+  }, []);
+
   const handleLogout = async () => {
     await signOut();
     router.push("/login");
   };
 
+  const formatDate = (dateString: string): string => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("tr-TR", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  const getStatusColor = (statusLabel: string): { bg: string; text: string } => {
+    if (statusLabel === "Güçlü Aday") {
+      return { bg: "bg-green-100", text: "text-green-800" };
+    } else if (statusLabel === "İkinci Görüşme") {
+      return { bg: "bg-yellow-100", text: "text-yellow-800" };
+    } else {
+      return { bg: "bg-red-100", text: "text-red-800" };
+    }
+  };
+
+  // Early return - TÜM HOOK'LARDAN SONRA
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -78,54 +127,6 @@ export default function DashboardPage() {
       ),
     },
   ];
-
-  // Supabase'den son seansları çek
-  useEffect(() => {
-    const fetchRecentSessions = async () => {
-      try {
-        setSessionsLoading(true);
-        const { data, error } = await supabase
-          .from("interview_sessions")
-          .select("id, candidate_name, interview_date, score_10, status_label")
-          .order("interview_date", { ascending: false })
-          .limit(10);
-
-        if (error) {
-          console.error("[Dashboard] Supabase hatası:", error);
-          return;
-        }
-
-        if (data) {
-          setRecentSessions(data);
-        }
-      } catch (err) {
-        console.error("[Dashboard] Hata:", err);
-      } finally {
-        setSessionsLoading(false);
-      }
-    };
-
-    fetchRecentSessions();
-  }, []);
-
-  const formatDate = (dateString: string): string => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("tr-TR", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  };
-
-  const getStatusColor = (statusLabel: string): { bg: string; text: string } => {
-    if (statusLabel === "Güçlü Aday") {
-      return { bg: "bg-green-100", text: "text-green-800" };
-    } else if (statusLabel === "İkinci Görüşme") {
-      return { bg: "bg-yellow-100", text: "text-yellow-800" };
-    } else {
-      return { bg: "bg-red-100", text: "text-red-800" };
-    }
-  };
 
   // Graph data points
   const graphData = [12, 18, 15, 25, 22, 8, 5];
