@@ -6,7 +6,7 @@ Audio chunk'larını OpenAI Whisper API ile Türkçe metne çevirir
 import os
 import logging
 from io import BytesIO
-from openai import OpenAI
+from openai import OpenAI, BadRequestError
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +44,10 @@ async def transcribe_with_whisper_chunk(
     language: str = "tr",
 ) -> str:
     """
-    Take a small audio chunk (webm/opus bytes from MediaRecorder) and return
-    a short transcript text using OpenAI Whisper. On error, return "".
+    Transcribe a single buffered audio chunk with OpenAI Whisper.
+    
+    - audio_bytes is raw audio from MediaRecorder (audio/webm;codecs=opus)
+    - We wrap it in a BytesIO and set .name so the SDK can detect the format
     
     Args:
         audio_bytes: Audio chunk bytes (MediaRecorder'dan gelen webm format)
@@ -54,8 +56,8 @@ async def transcribe_with_whisper_chunk(
     Returns:
         Transcribe edilmiş metin (boş string hata durumunda)
     """
-    if not audio_bytes or len(audio_bytes) == 0:
-        logger.warning("[Whisper STT] Boş audio bytes alındı")
+    if not audio_bytes:
+        logger.warning("[Whisper STT] Empty audio_bytes received")
         return ""
     
     if not OPENAI_API_KEY:
@@ -71,43 +73,46 @@ async def transcribe_with_whisper_chunk(
         )
         return ""
     
+    # Reuse existing helper to get the OpenAI client
+    client = get_openai_client()
+    
+    logger.info(
+        "[Whisper STT] Transkript isteniyor (model=%s, language=%s, audio_size=%d bytes)...",
+        DEFAULT_WHISPER_MODEL,
+        language,
+        len(audio_bytes),
+    )
+    
     try:
-        # OpenAI client'ı al
-        client = get_openai_client()
-        
-        # BytesIO kullanarak in-memory file object oluştur
-        file_obj = BytesIO(audio_bytes)
-        file_obj.name = "chunk.webm"  # IMPORTANT: valid audio extension for Whisper
-        file_obj.seek(0)  # Güvenlik için başa al
-        
-        logger.debug(f"[Whisper STT] BytesIO oluşturuldu: {len(audio_bytes)} bytes")
-        
-        # Whisper API'ye gönder
-        logger.info(
-            "[Whisper STT] Transkript isteniyor (model=%s, language=%s, audio_size=%d bytes)...",
-            DEFAULT_WHISPER_MODEL,
-            language,
-            len(audio_bytes)
-        )
+        # Wrap bytes in an in-memory file-like object
+        audio_file = BytesIO(audio_bytes)
+        # Important: give it a proper name with a supported extension
+        audio_file.name = "chunk.webm"
+        # Make sure the file pointer is at the beginning
+        audio_file.seek(0)
         
         result = client.audio.transcriptions.create(
             model=DEFAULT_WHISPER_MODEL,
-            file=file_obj,
+            file=audio_file,
             language=language,
-            response_format="text",  # plain text output
         )
         
-        # Sonucu al - response_format="text" olduğu için result direkt string
-        transcript_text = result if isinstance(result, str) else getattr(result, "text", "")
-        transcript_text = (transcript_text or "").strip()
-        
-        if transcript_text:
-            logger.info("[Whisper STT] Transcript: %s", transcript_text)
-        else:
-            logger.info("[Whisper STT] Empty transcript returned")
+        # New OpenAI Python SDK returns .text on the result
+        transcript_text = (getattr(result, "text", "") or "").strip()
+        logger.info("[Whisper STT] Transcript: %s", transcript_text)
         
         return transcript_text
         
+    except BadRequestError as e:
+        # Extra logging to debug format issues
+        sample_hex = audio_bytes[:32].hex()
+        logger.error(
+            "[Whisper STT] BadRequestError while transcribing chunk: %s | first_bytes_hex=%s",
+            str(e),
+            sample_hex,
+        )
+        logger.exception("[Whisper STT] BadRequestError details")
+        return ""
     except Exception:
         logger.exception("[Whisper STT] Error while transcribing chunk")
         return ""
