@@ -428,13 +428,18 @@ export default function InterviewAdminPage() {
               </button>
               <Button
                 onClick={handleInterviewAction}
+                disabled={isFinishingInterview}
                 className={`px-8 py-3 rounded-full font-medium flex items-center gap-2 ${
                   isInterviewStarted
                     ? "bg-red-600 hover:bg-red-700 text-white"
                     : "bg-purple-600 hover:bg-purple-700 text-white"
-                }`}
+                } ${isFinishingInterview ? "opacity-50 cursor-not-allowed" : ""}`}
               >
-                {isInterviewStarted ? "⏹ Görüşmeyi Bitir" : "▶ Görüşmeyi Başlat"}
+                {isFinishingInterview 
+                  ? "⏳ Rapor oluşturuluyor..." 
+                  : isInterviewStarted 
+                  ? "⏹ Görüşmeyi Bitir" 
+                  : "▶ Görüşmeyi Başlat"}
               </Button>
             </div>
           </div>
