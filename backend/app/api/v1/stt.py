@@ -154,81 +154,47 @@ async def stt_ws(
     """
     STT (Speech-to-Text) WebSocket endpoint
     
-    Client audio chunk'larını bu endpoint'e gönderir.
-    Backend bunları STT'ye verir ve sonucu transcript client'larına broadcast eder.
+    Client her 3 saniyede bir tam WebM dosyası gönderir.
+    Backend her mesajı bağımsız bir dosya olarak Whisper'a verir.
     
     Query Params:
         session_id: Mülakat oturum ID'si
         role: "candidate" (Aday) veya "interviewer" (Görüşmeci)
     """
     await ws.accept()
-    logger.info(f"[STT] WebSocket connected: session_id={session_id}, role={role}")
-    
-    audio_buffer = bytearray()
-    
-    # Minimum buffer boyutu - 8000 bytes (kullanıcı isteği)
-    MIN_BUFFER_SIZE = 8000  # ~0.5 saniye ses (16kHz, 16-bit)
+    logger.info("[STT] WebSocket connected: session_id=%s, role=%s", session_id, role)
     
     chunk_count = 0
     
     try:
         while True:
-            # Binary audio data al
-            chunk = await ws.receive_bytes()
+            # Binary audio data al - her mesaj tam bir WebM dosyası
+            audio_bytes = await ws.receive_bytes()
             chunk_count += 1
-            audio_buffer.extend(chunk)
             
-            logger.info(f"[STT] Chunk received: {len(chunk)} bytes, Buffer: {len(audio_buffer)} bytes (chunk #{chunk_count})")
+            logger.info("[STT] Received audio chunk: %d bytes (chunk #%d)", len(audio_bytes), chunk_count)
             
-            # Yeterli veri biriktiğinde transcribe et
-            if len(audio_buffer) >= MIN_BUFFER_SIZE:
-                buffer_size = len(audio_buffer)
-                logger.info(f"[STT] Buffer yeterli ({buffer_size} bytes), Whisper STT çağrılıyor...")
+            # Çok küçük chunk'ları ignore et (noise)
+            if len(audio_bytes) < 2000:
+                logger.debug("[STT] Chunk too small (%d bytes), skipping", len(audio_bytes))
+                continue
+            
+            # Her mesajı bağımsız bir dosya olarak Whisper'a gönder
+            transcript = await transcribe_bytes(audio_bytes)
+            
+            if transcript and transcript.strip():
+                logger.info("[STT] Whisper result: %s", transcript)
+                role_display = "Aday" if role == "candidate" else "Görüşmeci"
+                logger.info("[STT] Transcript: [%s] %s", role_display, transcript)
                 
-                # Whisper STT çağır
-                text = await transcribe_bytes(bytes(audio_buffer))
-                
-                # Buffer'ı temizle
-                audio_buffer.clear()
-                
-                logger.info(f"[STT] Whisper result: {text!r}")
-                
-                # Boş olmayan text'i broadcast et
-                if text and text.strip():
-                    role_display = "Aday" if role == "candidate" else "Görüşmeci"
-                    logger.info(f"[STT] Transcript: [{role_display}] {text}")
-                    
-                    # Transcript client'larına gönder
-                    await broadcast_transcript(session_id, role_display, text)
-                    logger.info(f"[STT] Transcript sent to client(s).")
-                else:
-                    logger.warning(f"[STT] Whisper boş text döndü, broadcast edilmedi")
+                # Transcript client'larına gönder
+                await broadcast_transcript(session_id, role_display, transcript)
+                logger.info("[STT] Transcript sent to client(s).")
+            else:
+                logger.info("[STT] Empty transcript, not broadcasting")
                     
     except WebSocketDisconnect:
-        logger.info(f"[STT] WebSocket disconnected: session_id={session_id}")
-    except Exception as e:
-        logger.exception(f"[STT] Unexpected error in STT WebSocket handler: {e}")
-    finally:
-        # Kalan buffer'ı işle - sadece yeterli büyüklükteyse
-        if audio_buffer and len(audio_buffer) >= MIN_BUFFER_SIZE:
-            logger.info(
-                "[STT] Processing remaining buffer: %d bytes (>= MIN_BUFFER_SIZE=%d), sending to Whisper",
-                len(audio_buffer),
-                MIN_BUFFER_SIZE,
-            )
-            try:
-                text = await transcribe_bytes(bytes(audio_buffer))
-                if text and text.strip():
-                    role_display = "Aday" if role == "candidate" else "Görüşmeci"
-                    logger.info(f"[STT] Final transcript: [{role_display}] {text}")
-                    await broadcast_transcript(session_id, role_display, text)
-                    logger.info(f"[STT] Final transcript sent to client(s).")
-            except Exception as e:
-                logger.exception(f"[STT] Error processing final buffer: {e}")
-        elif audio_buffer:
-            logger.info(
-                "[STT] Remaining buffer is too small (%d bytes < MIN_BUFFER_SIZE=%d), discarding without STT",
-                len(audio_buffer),
-                MIN_BUFFER_SIZE,
-            )
+        logger.info("[STT] WebSocket disconnected: session_id=%s", session_id)
+    except Exception:
+        logger.exception("[STT] Unexpected error in STT websocket")
 

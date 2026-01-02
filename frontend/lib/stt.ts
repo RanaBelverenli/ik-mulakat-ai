@@ -85,6 +85,7 @@ export class SttClient {
 
   /**
    * MediaRecorder'ı başlat ve audio chunk'larını WebSocket'e gönder
+   * Her 3 saniyede bir tam WebM dosyası gönderir
    */
   private startRecording(): void {
     if (!this.stream || !this.ws) {
@@ -108,41 +109,29 @@ export class SttClient {
     // Sadece audio track'lerle yeni stream oluştur
     const audioStream = new MediaStream(audioTracks);
 
-    // MediaRecorder için desteklenen MIME type'ı bul
-    const mimeTypes = [
-      'audio/webm;codecs=opus',
-      'audio/webm',
-      'audio/ogg;codecs=opus',
-      'audio/mp4',
-    ];
+    // MediaRecorder için MIME type - öncelikle audio/webm;codecs=opus
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus'
+      : 'audio/webm';
 
-    let selectedMimeType = '';
-    for (const mimeType of mimeTypes) {
-      if (MediaRecorder.isTypeSupported(mimeType)) {
-        selectedMimeType = mimeType;
-        break;
-      }
-    }
-
-    if (!selectedMimeType) {
+    if (!MediaRecorder.isTypeSupported(mimeType)) {
       console.error('[STT] Desteklenen MIME type bulunamadı');
       return;
     }
 
-    console.log('[STT] MediaRecorder MIME type:', selectedMimeType);
+    console.log('[STT] MediaRecorder MIME type:', mimeType);
 
     try {
-      this.recorder = new MediaRecorder(audioStream, {
-        mimeType: selectedMimeType,
-      });
+      this.recorder = new MediaRecorder(audioStream, { mimeType });
 
-      this.recorder.ondataavailable = (event) => {
-        if (event.data.size > 0 && this.ws?.readyState === WebSocket.OPEN) {
-          event.data.arrayBuffer().then((buffer) => {
-            this.ws?.send(buffer);
-            console.log(`[STT] Chunk gönderildi: ${buffer.byteLength} bytes`);
-          });
-        }
+      this.recorder.ondataavailable = async (event: BlobEvent) => {
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+        if (!event.data || event.data.size === 0) return;
+
+        // Her Blob'u olduğu gibi gönder (tam WebM dosyası)
+        const arrayBuffer = await event.data.arrayBuffer();
+        console.log('[STT] Sending chunk to backend:', arrayBuffer.byteLength, 'bytes');
+        this.ws.send(arrayBuffer); // send whole WebM file
       };
 
       this.recorder.onerror = (event) => {
@@ -157,8 +146,8 @@ export class SttClient {
         console.log('[STT] MediaRecorder stopped');
       };
 
-      // Her 500ms'de bir chunk gönder
-      this.recorder.start(500);
+      // Her 3 saniyede bir tam WebM dosyası üret
+      this.recorder.start(3000);
 
     } catch (error) {
       console.error('[STT] MediaRecorder oluşturma hatası:', error);

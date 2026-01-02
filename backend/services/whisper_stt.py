@@ -16,11 +16,11 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 # Whisper model - varsayılan whisper-1
 DEFAULT_WHISPER_MODEL = os.getenv("WHISPER_MODEL_NAME", "whisper-1")
 
-# Minimum buffer size - stt.py ile senkronize tutulmalı
-MIN_BUFFER_SIZE = 8000
-
 # OpenAI client - global olarak bir kez oluştur
 _client: OpenAI | None = None
+
+# BadRequestError loglama kontrolü (noisy log önleme)
+_bad_request_logged = False
 
 
 def get_openai_client() -> OpenAI:
@@ -64,15 +64,6 @@ async def transcribe_with_whisper_chunk(
         logger.error("[Whisper STT] OPENAI_API_KEY bulunamadı")
         return ""
     
-    # Defensive check: çok küçük buffer'ları reddet
-    if len(audio_bytes) < MIN_BUFFER_SIZE:
-        logger.info(
-            "[Whisper STT] Audio too short for transcription (%d bytes < %d), returning empty string",
-            len(audio_bytes),
-            MIN_BUFFER_SIZE,
-        )
-        return ""
-    
     # Reuse existing helper to get the OpenAI client
     client = get_openai_client()
     
@@ -104,14 +95,17 @@ async def transcribe_with_whisper_chunk(
         return transcript_text
         
     except BadRequestError as e:
-        # Extra logging to debug format issues
-        sample_hex = audio_bytes[:32].hex()
-        logger.error(
-            "[Whisper STT] BadRequestError while transcribing chunk: %s | first_bytes_hex=%s",
-            str(e),
-            sample_hex,
-        )
-        logger.exception("[Whisper STT] BadRequestError details")
+        # Extra logging to debug format issues - sadece bir kez logla (noisy log önleme)
+        global _bad_request_logged
+        if not _bad_request_logged:
+            sample_hex = audio_bytes[:32].hex()
+            logger.error(
+                "[Whisper STT] BadRequestError: %s | first_bytes_hex=%s",
+                str(e),
+                sample_hex,
+            )
+            logger.exception("[Whisper STT] BadRequestError details")
+            _bad_request_logged = True
         return ""
     except Exception:
         logger.exception("[Whisper STT] Error while transcribing chunk")
