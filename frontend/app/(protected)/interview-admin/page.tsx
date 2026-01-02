@@ -51,23 +51,59 @@ export default function InterviewAdminPage() {
     return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   };
 
-  const handleInterviewAction = () => {
+  const handleInterviewAction = async () => {
     if (!isInterviewStarted) {
       setIsInterviewStarted(true);
       setDuration(0);
       return;
     }
 
-    // Transcript'i localStorage'a kaydet (rapor sayfası için)
+    // Mülakat bitişi - Gemini raporu oluştur ve Supabase'e kaydet
     const candidateTranscript = transcriptItems
       .filter((item) => item.role === "Aday")
       .map((item) => item.text)
       .join("\n");
     
-    localStorage.setItem("interview_transcript", candidateTranscript);
-    localStorage.setItem("interview_duration", duration.toString());
-    
-    router.push("/interview-report");
+    if (!candidateTranscript || candidateTranscript.trim().length < 20) {
+      alert("Transkript çok kısa. Lütfen adayın konuşmasını bekleyin.");
+      return;
+    }
+
+    try {
+      // Backend API'ye istek gönder
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'https://ik-mulakat-ai.onrender.com';
+      const response = await fetch(`${backendUrl}/api/v1/interviews`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          candidate_name: "Aday", // TODO: Gerçek aday adını buraya ekle
+          candidate_email: null,
+          transcript: candidateTranscript,
+          language: "tr",
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: "Unknown error" }));
+        throw new Error(errorData.detail || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("[Interview Admin] Mülakat oturumu oluşturuldu:", data);
+
+      // Session ID'yi localStorage'a kaydet
+      localStorage.setItem("interview_session_id", data.id);
+      localStorage.setItem("interview_transcript", candidateTranscript);
+      localStorage.setItem("interview_duration", duration.toString());
+      
+      // Rapor sayfasına yönlendir
+      router.push(`/interview-report?session_id=${data.id}`);
+    } catch (error) {
+      console.error("[Interview Admin] Hata:", error);
+      alert("Mülakat raporu oluşturulurken bir hata oluştu. Lütfen tekrar deneyin.");
+    }
   };
 
   // Initialize camera and microphone stream only once on mount
