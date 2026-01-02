@@ -31,35 +31,21 @@ router = APIRouter()
 # session_id -> transcript websocket client list
 transcript_clients: Dict[str, List[WebSocket]] = {}
 
+# Session bazlı STT buffer state
+SESSION_BUFFERS: Dict[str, bytearray] = {}  # raw audio bytes per session
+SESSION_LAST_TEXT: Dict[str, str] = {}  # last full transcript returned by Whisper
+SESSION_LAST_PROCESSED_SIZE: Dict[str, int] = {}  # last buffer length for which we called Whisper
+
+# Threshold'lar
+MIN_FIRST_STT_BYTES = 40000  # don't call Whisper before buffer >= 40 KB
+MIN_DELTA_BYTES = 20000  # call Whisper again only if buffer increased by at least 20 KB
+
 
 def get_session_clients(session_id: str) -> List[WebSocket]:
     """Session'a ait transcript client'larını döndür"""
     if session_id not in transcript_clients:
         transcript_clients[session_id] = []
     return transcript_clients[session_id]
-
-
-async def transcribe_bytes(data: bytes) -> str:
-    """
-    Audio bytes'ı text'e çevir (STT) - OpenAI Whisper API kullanır
-    
-    Args:
-        data: Audio bytes (webm/opus format)
-    
-    Returns:
-        Transcribed text (Türkçe)
-    """
-    try:
-        # Whisper STT ile transkript et
-        text = await transcribe_with_whisper_chunk(
-            audio_bytes=data,
-            language="tr",  # Türkçe
-        )
-        return text
-    except Exception as e:
-        logger.error(f"[STT] Whisper transkript hatası: {e}", exc_info=True)
-        # Hata durumunda boş string döndür (sistem çalışmaya devam eder)
-        return ""
 
 
 async def broadcast_transcript(session_id: str, role: str, text: str):
@@ -154,8 +140,8 @@ async def stt_ws(
     """
     STT (Speech-to-Text) WebSocket endpoint
     
-    Client her 3 saniyede bir tam WebM dosyası gönderir.
-    Backend her mesajı bağımsız bir dosya olarak Whisper'a verir.
+    Client her 3 saniyede bir WebM chunk gönderir.
+    Backend session bazlı buffer'da biriktirir ve tam dosyayı Whisper'a verir.
     
     Query Params:
         session_id: Mülakat oturum ID'si
@@ -168,33 +154,105 @@ async def stt_ws(
     
     try:
         while True:
-            # Binary audio data al - her mesaj tam bir WebM dosyası
+            # Binary audio data al
             audio_bytes = await ws.receive_bytes()
             chunk_count += 1
-            
-            logger.info("[STT] Received audio chunk: %d bytes (chunk #%d)", len(audio_bytes), chunk_count)
             
             # Çok küçük chunk'ları ignore et (noise)
             if len(audio_bytes) < 2000:
                 logger.debug("[STT] Chunk too small (%d bytes), skipping", len(audio_bytes))
                 continue
             
-            # Her mesajı bağımsız bir dosya olarak Whisper'a gönder
-            transcript = await transcribe_bytes(audio_bytes)
+            # Session buffer'ını al veya oluştur
+            buffer = SESSION_BUFFERS.setdefault(session_id, bytearray())
             
-            if transcript and transcript.strip():
-                logger.info("[STT] Whisper result: %s", transcript)
-                role_display = "Aday" if role == "candidate" else "Görüşmeci"
-                logger.info("[STT] Transcript: [%s] %s", role_display, transcript)
+            # Yeni chunk'ı buffer'a ekle
+            buffer.extend(audio_bytes)
+            total_size = len(buffer)
+            
+            logger.info(
+                "[STT] Received audio chunk: %d bytes (chunk #%d), buffer_size=%d",
+                len(audio_bytes),
+                chunk_count,
+                total_size,
+            )
+            
+            # Son Whisper çağrısından bu yana ne kadar yeni veri geldi?
+            prev_size = SESSION_LAST_PROCESSED_SIZE.get(session_id, 0)
+            delta = total_size - prev_size
+            
+            logger.debug(
+                "[STT] Buffer state: total=%d, prev_processed=%d, delta=%d",
+                total_size,
+                prev_size,
+                delta,
+            )
+            
+            # Whisper çağrısı yapılacak mı?
+            if total_size >= MIN_FIRST_STT_BYTES and delta >= MIN_DELTA_BYTES:
+                logger.info(
+                    "[STT] Calling Whisper: total_size=%d >= %d, delta=%d >= %d",
+                    total_size,
+                    MIN_FIRST_STT_BYTES,
+                    delta,
+                    MIN_DELTA_BYTES,
+                )
                 
-                # Transcript client'larına gönder
-                await broadcast_transcript(session_id, role_display, transcript)
-                logger.info("[STT] Transcript sent to client(s).")
+                # Tam buffer'ı Whisper'a gönder
+                full_audio_bytes = bytes(buffer)
+                transcript_full = await transcribe_with_whisper_chunk(full_audio_bytes, language="tr")
+                
+                if transcript_full and transcript_full.strip():
+                    # Önceki tam text
+                    prev_text = SESSION_LAST_TEXT.get(session_id, "")
+                    
+                    # Sadece yeni eklenen kısmı al
+                    if transcript_full.startswith(prev_text):
+                        new_text = transcript_full[len(prev_text):].strip()
+                    else:
+                        # Eğer önceki text ile başlamıyorsa, tüm text'i yeni kabul et
+                        new_text = transcript_full.strip()
+                        logger.warning(
+                            "[STT] Transcript doesn't start with previous text, sending full transcript"
+                        )
+                    
+                    # State'i güncelle
+                    SESSION_LAST_TEXT[session_id] = transcript_full
+                    SESSION_LAST_PROCESSED_SIZE[session_id] = total_size
+                    
+                    logger.info(
+                        "[STT] Whisper result - Full: %s | New: %s",
+                        transcript_full[:100] + "..." if len(transcript_full) > 100 else transcript_full,
+                        new_text[:100] + "..." if len(new_text) > 100 else new_text,
+                    )
+                    
+                    # Yeni text'i broadcast et
+                    if new_text:
+                        role_display = "Aday" if role == "candidate" else "Görüşmeci"
+                        logger.info("[STT] Broadcasting new text: [%s] %s", role_display, new_text)
+                        await broadcast_transcript(session_id, role_display, new_text)
+                        logger.info("[STT] Transcript sent to client(s).")
+                    else:
+                        logger.debug("[STT] No new text to broadcast")
+                else:
+                    logger.info("[STT] Whisper returned empty text, not broadcasting")
             else:
-                logger.info("[STT] Empty transcript, not broadcasting")
+                logger.debug(
+                    "[STT] Skipping Whisper call: total_size=%d < %d or delta=%d < %d",
+                    total_size,
+                    MIN_FIRST_STT_BYTES,
+                    delta,
+                    MIN_DELTA_BYTES,
+                )
                     
     except WebSocketDisconnect:
         logger.info("[STT] WebSocket disconnected: session_id=%s", session_id)
     except Exception:
         logger.exception("[STT] Unexpected error in STT websocket")
+    finally:
+        # Session state'i temizle
+        SESSION_BUFFERS.pop(session_id, None)
+        SESSION_LAST_TEXT.pop(session_id, None)
+        SESSION_LAST_PROCESSED_SIZE.pop(session_id, None)
+        logger.info("[STT] Cleaned up session state for session_id=%s", session_id)
 
