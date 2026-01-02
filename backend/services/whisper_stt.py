@@ -4,8 +4,8 @@ Audio chunk'larını OpenAI Whisper API ile Türkçe metne çevirir
 """
 
 import os
-import tempfile
 import logging
+from io import BytesIO
 from openai import OpenAI
 
 logger = logging.getLogger(__name__)
@@ -63,50 +63,38 @@ async def transcribe_with_whisper_chunk(
         # OpenAI client'ı al
         client = get_openai_client()
         
-        # Write bytes to a temporary .webm file
-        with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
-            tmp.write(audio_bytes)
-            tmp.flush()
-            tmp_path = tmp.name
+        # BytesIO kullanarak in-memory file object oluştur
+        file_obj = BytesIO(audio_bytes)
+        file_obj.name = "chunk.webm"  # IMPORTANT: valid audio extension for Whisper
         
-        logger.debug(f"[Whisper STT] Geçici dosya oluşturuldu: {tmp_path} ({len(audio_bytes)} bytes)")
+        logger.debug(f"[Whisper STT] BytesIO oluşturuldu: {len(audio_bytes)} bytes")
         
         # Whisper API'ye gönder
-        logger.info(f"[Whisper STT] Transkript isteniyor (model: {DEFAULT_WHISPER_MODEL}, language: {language}, audio_size: {len(audio_bytes)} bytes)...")
+        logger.info(
+            "[Whisper STT] Transkript isteniyor (model=%s, language=%s, audio_size=%d bytes)...",
+            DEFAULT_WHISPER_MODEL,
+            language,
+            len(audio_bytes)
+        )
         
-        with open(tmp_path, "rb") as f:
-            result = client.audio.transcriptions.create(
-                model=DEFAULT_WHISPER_MODEL,
-                file=f,
-                language=language,
-                response_format="text",  # plain text output
-            )
+        result = client.audio.transcriptions.create(
+            model=DEFAULT_WHISPER_MODEL,
+            file=file_obj,
+            language=language,
+            response_format="text",  # plain text output
+        )
         
-        # Sonucu al
-        text = (result or "").strip()
+        # Sonucu al - response_format="text" olduğu için result direkt string
+        transcript_text = result if isinstance(result, str) else getattr(result, "text", "")
+        transcript_text = (transcript_text or "").strip()
         
-        if text:
-            logger.info(f"[Whisper STT] Transcript: {text}")
+        if transcript_text:
+            logger.info("[Whisper STT] Transcript: %s", transcript_text)
         else:
             logger.info("[Whisper STT] Empty transcript returned")
         
-        # Geçici dosyayı sil
-        try:
-            os.unlink(tmp_path)
-            logger.debug(f"[Whisper STT] Geçici dosya silindi: {tmp_path}")
-        except Exception as e:
-            logger.warning(f"[Whisper STT] Dosya silme hatası: {e}")
+        return transcript_text
         
-        return text
-        
-    except Exception as e:
+    except Exception:
         logger.exception("[Whisper STT] Error while transcribing chunk")
         return ""
-    
-    finally:
-        # Geçici dosya hala varsa sil
-        if 'tmp_path' in locals() and tmp_path and os.path.exists(tmp_path):
-            try:
-                os.unlink(tmp_path)
-            except Exception:
-                pass
