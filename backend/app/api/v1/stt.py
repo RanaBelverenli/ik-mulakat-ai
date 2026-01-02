@@ -209,9 +209,13 @@ async def stt_ws(
     except Exception as e:
         logger.exception(f"[STT] Unexpected error in STT WebSocket handler: {e}")
     finally:
-        # Kalan buffer'ı işle
-        if len(audio_buffer) > 0:
-            logger.info(f"[STT] Processing remaining buffer: {len(audio_buffer)} bytes")
+        # Kalan buffer'ı işle - sadece yeterli büyüklükteyse
+        if audio_buffer and len(audio_buffer) >= MIN_BUFFER_SIZE:
+            logger.info(
+                "[STT] Processing remaining buffer: %d bytes (>= MIN_BUFFER_SIZE=%d), sending to Whisper",
+                len(audio_buffer),
+                MIN_BUFFER_SIZE,
+            )
             try:
                 text = await transcribe_bytes(bytes(audio_buffer))
                 if text and text.strip():
@@ -221,4 +225,10 @@ async def stt_ws(
                     logger.info(f"[STT] Final transcript sent to client(s).")
             except Exception as e:
                 logger.exception(f"[STT] Error processing final buffer: {e}")
+        elif audio_buffer:
+            logger.info(
+                "[STT] Remaining buffer is too small (%d bytes < MIN_BUFFER_SIZE=%d), discarding without STT",
+                len(audio_buffer),
+                MIN_BUFFER_SIZE,
+            )
 

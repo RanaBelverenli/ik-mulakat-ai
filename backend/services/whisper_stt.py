@@ -16,6 +16,9 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 # Whisper model - varsayılan whisper-1
 DEFAULT_WHISPER_MODEL = os.getenv("WHISPER_MODEL_NAME", "whisper-1")
 
+# Minimum buffer size - stt.py ile senkronize tutulmalı
+MIN_BUFFER_SIZE = 8000
+
 # OpenAI client - global olarak bir kez oluştur
 _client: OpenAI | None = None
 
@@ -59,6 +62,15 @@ async def transcribe_with_whisper_chunk(
         logger.error("[Whisper STT] OPENAI_API_KEY bulunamadı")
         return ""
     
+    # Defensive check: çok küçük buffer'ları reddet
+    if len(audio_bytes) < MIN_BUFFER_SIZE:
+        logger.info(
+            "[Whisper STT] Audio too short for transcription (%d bytes < %d), returning empty string",
+            len(audio_bytes),
+            MIN_BUFFER_SIZE,
+        )
+        return ""
+    
     try:
         # OpenAI client'ı al
         client = get_openai_client()
@@ -66,6 +78,7 @@ async def transcribe_with_whisper_chunk(
         # BytesIO kullanarak in-memory file object oluştur
         file_obj = BytesIO(audio_bytes)
         file_obj.name = "chunk.webm"  # IMPORTANT: valid audio extension for Whisper
+        file_obj.seek(0)  # Güvenlik için başa al
         
         logger.debug(f"[Whisper STT] BytesIO oluşturuldu: {len(audio_bytes)} bytes")
         
