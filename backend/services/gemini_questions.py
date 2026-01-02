@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 # Gemini API Key - environment variable'dan al
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# Gemini model - varsayılan gemini-1.5-flash
-GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash")
+# Gemini model - varsayılan gemini-2.5-flash
+GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash")
 
 # Minimum transcript uzunluğu
 MIN_TRANSCRIPT_LENGTH = 50  # karakter
