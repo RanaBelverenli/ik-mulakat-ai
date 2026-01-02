@@ -58,6 +58,15 @@ export default function InterviewAdminPage() {
       return;
     }
 
+    // Transcript'i localStorage'a kaydet (rapor sayfası için)
+    const candidateTranscript = transcriptItems
+      .filter((item) => item.role === "Aday")
+      .map((item) => item.text)
+      .join("\n");
+    
+    localStorage.setItem("interview_transcript", candidateTranscript);
+    localStorage.setItem("interview_duration", duration.toString());
+    
     router.push("/interview-report");
   };
 
