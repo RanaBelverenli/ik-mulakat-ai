@@ -23,9 +23,10 @@ export interface TranscriptItem {
 
 interface LiveTranscriptPanelProps {
   sessionId: string;
+  onTranscriptChange?: (items: TranscriptItem[]) => void; // Callback for transcript changes
 }
 
-export function LiveTranscriptPanel({ sessionId }: LiveTranscriptPanelProps) {
+export function LiveTranscriptPanel({ sessionId, onTranscriptChange }: LiveTranscriptPanelProps) {
   const [items, setItems] = useState<TranscriptItem[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
@@ -89,7 +90,12 @@ export function LiveTranscriptPanel({ sessionId }: LiveTranscriptPanelProps) {
         };
 
         console.log('[LiveTranscript] Yeni transcript item eklendi:', newItem);
-        setItems((prev) => [...prev, newItem]);
+        setItems((prev) => {
+          const newItems = [...prev, newItem];
+          // Callback'i çağır
+          onTranscriptChange?.(newItems);
+          return newItems;
+        });
       } catch (error) {
         console.error('[Transcript] Mesaj parse hatası:', error, event.data);
       }
@@ -105,12 +111,14 @@ export function LiveTranscriptPanel({ sessionId }: LiveTranscriptPanelProps) {
     };
   }, [sessionId]);
 
-  // Yeni mesaj geldiğinde otomatik scroll
+  // Yeni mesaj geldiğinde otomatik scroll ve callback
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [items]);
+    // Transcript değiştiğinde callback'i çağır
+    onTranscriptChange?.(items);
+  }, [items, onTranscriptChange]);
 
   const formatTime = (date: Date): string => {
     return date.toLocaleTimeString('tr-TR', {

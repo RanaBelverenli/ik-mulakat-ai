@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useWebRTC } from "@/webrtc/useWebRTC";
-import { LiveTranscriptPanel } from "@/components/LiveTranscriptPanel";
+import { LiveTranscriptPanel, TranscriptItem } from "@/components/LiveTranscriptPanel";
+import { AiQuestionSuggestionsCard } from "@/components/AiQuestionSuggestionsCard";
 
 // Mülakat oturum ID'si - gerçek uygulamada dinamik olmalı
 const SESSION_ID = "interview-room-1";
@@ -19,6 +20,7 @@ export default function InterviewAdminPage() {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
+  const [transcriptItems, setTranscriptItems] = useState<TranscriptItem[]>([]);
   const mainVideoRef = useRef<HTMLVideoElement | null>(null);
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -372,50 +374,16 @@ export default function InterviewAdminPage() {
       <div className="w-96 bg-gray-50 border-l border-gray-200 overflow-y-auto h-full">
         <div className="p-6 space-y-6">
           {/* Canlı Transkript - WebSocket üzerinden gerçek zamanlı */}
-          <LiveTranscriptPanel sessionId={SESSION_ID} />
+          <LiveTranscriptPanel 
+            sessionId={SESSION_ID} 
+            onTranscriptChange={setTranscriptItems}
+          />
 
-          <Card className="p-4 bg-white">
-            <div className="flex items-center gap-2 mb-4">
-              <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                />
-              </svg>
-              <h2 className="text-lg font-semibold text-gray-900">Duygu Analizi</h2>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-gray-700">Pozitif</span>
-                  <span className="font-medium text-gray-900">72%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div className="bg-green-500 h-2 rounded-full" style={{ width: "72%" }}></div>
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-gray-700">Nötr</span>
-                  <span className="font-medium text-gray-900">20%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div className="bg-gray-400 h-2 rounded-full" style={{ width: "20%" }}></div>
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-gray-700">Negatif</span>
-                  <span className="font-medium text-gray-900">8%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div className="bg-red-500 h-2 rounded-full" style={{ width: "8%" }}></div>
-                </div>
-              </div>
-            </div>
-          </Card>
+          {/* Soru Önerileri (Gemini) - Duygu Analizi yerine */}
+          <AiQuestionSuggestionsCard 
+            sessionId={SESSION_ID}
+            transcriptItems={transcriptItems}
+          />
 
           <Card className="p-4 bg-white">
             <div className="flex items-center gap-2 mb-4">

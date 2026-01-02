@@ -58,11 +58,12 @@ app.add_middleware(
 )
 
 # Import routers
-from app.api.v1 import signaling, stt
+from app.api.v1 import signaling, stt, ai
 
 # Include routers
 app.include_router(signaling.router, prefix="/api/v1", tags=["Signaling"])
 app.include_router(stt.router, prefix="/api/v1/stt", tags=["STT"])
+app.include_router(ai.router, prefix="/api/v1/ai", tags=["AI"])
 
 
 @app.get("/")
