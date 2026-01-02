@@ -8,11 +8,7 @@
 import { useEffect, useState, useRef } from "react";
 import { Card } from "@/components/ui/card";
 
-// Backend URL
-const getBackendUrl = (): string => {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://ik-mulakat-ai.onrender.com';
-  return apiUrl.replace(/^http/, 'ws').replace(/\/$/, '');
-};
+import { getBackendWsUrl } from '@/lib/backendUrl';
 
 export interface TranscriptItem {
   id: string;
@@ -37,7 +33,7 @@ export function LiveTranscriptPanel({ sessionId, onTranscriptChange }: LiveTrans
   useEffect(() => {
     if (!sessionId) return;
 
-    const backendUrl = getBackendUrl();
+    const backendUrl = getBackendWsUrl();
     const wsUrl = `${backendUrl}/api/v1/stt/ws/transcript?session_id=${sessionId}`;
 
     console.log('[Transcript] WebSocket bağlantısı kuruluyor:', wsUrl);

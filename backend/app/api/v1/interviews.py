@@ -79,7 +79,7 @@ async def create_interview(payload: CreateInterviewRequest):
         Oluşturulan interview session bilgileri
     """
     logger.info(
-        "[Interviews] Yeni mülakat oturumu oluşturuluyor (candidate_name=%s, transcript_length=%d)",
+        "[Interviews] POST /api/v1/interviews - Yeni mülakat oturumu oluşturuluyor (candidate_name=%s, transcript_length=%d)",
         payload.candidate_name,
         len(payload.transcript) if payload.transcript else 0,
     )
@@ -115,9 +115,10 @@ async def create_interview(payload: CreateInterviewRequest):
         status_label = calculate_status_label(score_10)
         
         logger.info(
-            "[Interviews] Rapor üretildi: score_10=%.1f, status_label=%s",
+            "[Interviews] Gemini raporu üretildi: score_10=%.1f, status_label=%s, model=%s",
             score_10,
             status_label,
+            "gemini-2.5-flash",
         )
         
         # 4. Supabase'e kaydet
@@ -143,6 +144,7 @@ async def create_interview(payload: CreateInterviewRequest):
         result = supabase.table("interview_sessions").insert(insert_data).execute()
         
         if not result.data or len(result.data) == 0:
+            logger.error("[Interviews] Supabase insert başarısız - result.data boş")
             raise HTTPException(
                 status_code=500,
                 detail="Supabase'e kayıt başarısız oldu.",
@@ -152,8 +154,10 @@ async def create_interview(payload: CreateInterviewRequest):
         session_id = created_session["id"]
         
         logger.info(
-            "[Interviews] Mülakat oturumu başarıyla oluşturuldu: id=%s",
+            "[Interviews] ✅ Mülakat oturumu başarıyla oluşturuldu: id=%s, score_10=%.1f, status=%s",
             session_id,
+            score_10,
+            status_label,
         )
         
         return CreateInterviewResponse(

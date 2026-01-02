@@ -21,6 +21,7 @@ export default function InterviewAdminPage() {
   const [videoError, setVideoError] = useState<string | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [transcriptItems, setTranscriptItems] = useState<TranscriptItem[]>([]);
+  const [isFinishingInterview, setIsFinishingInterview] = useState(false);
   const mainVideoRef = useRef<HTMLVideoElement | null>(null);
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -59,6 +60,10 @@ export default function InterviewAdminPage() {
     }
 
     // Mülakat bitişi - Gemini raporu oluştur ve Supabase'e kaydet
+    if (isFinishingInterview) {
+      return; // Zaten işlem devam ediyor
+    }
+
     const candidateTranscript = transcriptItems
       .filter((item) => item.role === "Aday")
       .map((item) => item.text)
@@ -69,10 +74,18 @@ export default function InterviewAdminPage() {
       return;
     }
 
+    setIsFinishingInterview(true);
+
     try {
       // Backend API'ye istek gönder
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'https://ik-mulakat-ai.onrender.com';
-      const response = await fetch(`${backendUrl}/api/v1/interviews`, {
+      const { getBackendUrl, logBackendUrl } = await import('@/lib/backendUrl');
+      logBackendUrl();
+      const backendUrl = getBackendUrl();
+      
+      const requestUrl = `${backendUrl}/api/v1/interviews`;
+      console.log('[Interview Admin] Requesting interview report:', requestUrl);
+      
+      const response = await fetch(requestUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -126,6 +139,8 @@ export default function InterviewAdminPage() {
       }
       
       alert(`${errorMessage}\n\nKonsolu kontrol edin (F12) daha fazla detay için.`);
+    } finally {
+      setIsFinishingInterview(false);
     }
   };
 

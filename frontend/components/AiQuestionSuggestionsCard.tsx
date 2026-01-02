@@ -10,11 +10,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { TranscriptItem } from "./LiveTranscriptPanel";
 
-// Backend URL
-const getBackendUrl = (): string => {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://ik-mulakat-ai.onrender.com';
-  return apiUrl.replace(/\/$/, '');
-};
+import { getBackendUrl } from '@/lib/backendUrl';
 
 interface AiQuestionSuggestionsCardProps {
   sessionId: string;

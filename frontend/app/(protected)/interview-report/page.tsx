@@ -94,7 +94,8 @@ export default function InterviewReportPage() {
         }
 
         // Backend API'ye istek gönder
-        const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'https://ik-mulakat-ai.onrender.com';
+        const { getBackendUrl } = await import('@/lib/backendUrl');
+        const backendUrl = getBackendUrl();
         const response = await fetch(`${backendUrl}/api/v1/ai/report`, {
           method: "POST",
           headers: {
