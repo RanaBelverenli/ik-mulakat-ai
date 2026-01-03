@@ -1,81 +1,20 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { supabase } from "@/lib/supabaseClient";
-
-interface InterviewSession {
-  id: string;
-  candidate_name: string;
-  interview_date: string;
-  score_10: number;
-  status_label: string;
-}
 
 export default function DashboardPage() {
   const router = useRouter();
   const { user, loading } = useAuth();
-  const [recentSessions, setRecentSessions] = useState<InterviewSession[]>([]);
-  const [sessionsLoading, setSessionsLoading] = useState(true);
-
-  // Supabase'den son seansları çek - TÜM HOOK'LAR ERKEN RETURN'DEN ÖNCE OLMALI
-  useEffect(() => {
-    const fetchRecentSessions = async () => {
-      try {
-        setSessionsLoading(true);
-        const { data, error } = await supabase
-          .from("interview_sessions")
-          .select("id, candidate_name, interview_date, score_10, status_label")
-          .order("interview_date", { ascending: false })
-          .limit(10);
-
-        if (error) {
-          console.error("[Dashboard] Supabase hatası:", error);
-          return;
-        }
-
-        if (data) {
-          setRecentSessions(data);
-        }
-      } catch (err) {
-        console.error("[Dashboard] Hata:", err);
-      } finally {
-        setSessionsLoading(false);
-      }
-    };
-
-    fetchRecentSessions();
-  }, []);
 
   const handleLogout = async () => {
     await signOut();
     router.push("/login");
   };
 
-  const formatDate = (dateString: string): string => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("tr-TR", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  };
-
-  const getStatusColor = (statusLabel: string): { bg: string; text: string } => {
-    if (statusLabel === "Güçlü Aday") {
-      return { bg: "bg-green-100", text: "text-green-800" };
-    } else if (statusLabel === "İkinci Görüşme") {
-      return { bg: "bg-yellow-100", text: "text-yellow-800" };
-    } else {
-      return { bg: "bg-red-100", text: "text-red-800" };
-    }
-  };
-
-  // Early return - TÜM HOOK'LARDAN SONRA
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -126,6 +65,14 @@ export default function DashboardPage() {
         </svg>
       ),
     },
+  ];
+
+  const recentSessions = [
+    { name: "Ahmet Yılmaz", date: "14 Kas 2025", score: "8.5/10", recommendation: "Güçlü Aday", status: "success" },
+    { name: "Ayşe Demir", date: "14 Kas 2025", score: "7.2/10", recommendation: "İkinci Görüşme", status: "warning" },
+    { name: "Mehmet Kaya", date: "13 Kas 2025", score: "5.1/10", recommendation: "Uygun Değil", status: "error" },
+    { name: "Fatma Şahin", date: "13 Kas 2025", score: "9.1/10", recommendation: "Güçlü Aday", status: "success" },
+    { name: "Ali Çelik", date: "12 Kas 2025", score: "6.8/10", recommendation: "İkinci Görüşme", status: "warning" },
   ];
 
   // Graph data points
@@ -291,42 +238,36 @@ export default function DashboardPage() {
           {/* Recent Sessions */}
           <Card className="p-6 bg-white">
             <h2 className="text-xl font-semibold text-gray-900 mb-6">Son Seanslar</h2>
-            {sessionsLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="w-8 h-8 border-4 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
-              </div>
-            ) : recentSessions.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <p>Henüz mülakat seansı yok.</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {recentSessions.map((session) => {
-                  const statusColors = getStatusColor(session.status_label);
-                  return (
-                    <div
-                      key={session.id}
-                      className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
-                      onClick={() => router.push(`/interview-report?session_id=${session.id}`)}
-                    >
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-gray-900 mb-1">{session.candidate_name}</h3>
-                        <p className="text-sm text-gray-600">{formatDate(session.interview_date)}</p>
-                      </div>
-                      <div className="flex items-center gap-6">
-                        <div className="text-right">
-                          <p className="font-semibold text-gray-900">{session.score_10.toFixed(1)}/10</p>
-                          <p className="text-xs text-gray-600">Puan</p>
-                        </div>
-                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusColors.bg} ${statusColors.text}`}>
-                          {session.status_label}
-                        </span>
-                      </div>
+            <div className="space-y-4">
+              {recentSessions.map((session, index) => (
+                <div
+                  key={index}
+                  className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
+                >
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-gray-900 mb-1">{session.name}</h3>
+                    <p className="text-sm text-gray-600">{session.date}</p>
+                  </div>
+                  <div className="flex items-center gap-6">
+                    <div className="text-right">
+                      <p className="font-semibold text-gray-900">{session.score}</p>
+                      <p className="text-xs text-gray-600">Puan</p>
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                    <span
+                      className={`px-3 py-1 rounded-full text-sm font-medium ${
+                        session.status === "success"
+                          ? "bg-green-100 text-green-800"
+                          : session.status === "warning"
+                          ? "bg-yellow-100 text-yellow-800"
+                          : "bg-red-100 text-red-800"
+                      }`}
+                    >
+                      {session.recommendation}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </Card>
         </div>
       </main>

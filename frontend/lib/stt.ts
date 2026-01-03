@@ -3,7 +3,12 @@
  * Aday sesini backend'e göndererek canlı transkript oluşturur
  */
 
-import { getBackendWsUrl } from './backendUrl';
+// Backend URL - environment variable'dan al
+const getBackendUrl = (): string => {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://ik-mulakat-ai.onrender.com';
+  // HTTP/HTTPS'i WSS'e çevir
+  return apiUrl.replace(/^http/, 'ws').replace(/\/$/, '');
+};
 
 export type SttRole = 'candidate' | 'interviewer';
 
@@ -47,7 +52,7 @@ export class SttClient {
 
     this.stream = stream;
 
-    const backendUrl = getBackendWsUrl();
+    const backendUrl = getBackendUrl();
     const wsUrl = `${backendUrl}/api/v1/stt/ws/stt?session_id=${this.sessionId}&role=${this.role}`;
 
     console.log('[STT] WebSocket bağlantısı kuruluyor:', wsUrl);

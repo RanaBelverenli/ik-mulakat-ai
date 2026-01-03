@@ -66,8 +66,6 @@ def _normalize_report(data: Dict[str, Any]) -> Dict[str, Any]:
     
     try:
         base["overall_score"] = int(data.get("overall_score", 0))
-        # 0-100 arası sınırla
-        base["overall_score"] = max(0, min(100, base["overall_score"]))
     except Exception:
         pass
     
@@ -79,19 +77,6 @@ def _normalize_report(data: Dict[str, Any]) -> Dict[str, Any]:
             base["sentiment"][key] = int(sentiment.get(key, 0))
         except Exception:
             pass
-    
-    # Sentiment yüzdelerini normalize et (toplam 100 olmalı)
-    total = sum(base["sentiment"].values())
-    if total > 0:
-        # Oranları koruyarak 100'e normalize et
-        base["sentiment"]["positive"] = round((base["sentiment"]["positive"] / total) * 100)
-        base["sentiment"]["neutral"] = round((base["sentiment"]["neutral"] / total) * 100)
-        base["sentiment"]["negative"] = 100 - base["sentiment"]["positive"] - base["sentiment"]["neutral"]
-    else:
-        # Eğer hiç sentiment yoksa eşit dağıt
-        base["sentiment"]["positive"] = 33
-        base["sentiment"]["neutral"] = 34
-        base["sentiment"]["negative"] = 33
     
     for field in ["key_topics", "strengths", "improvements"]:
         items = data.get(field) or []
@@ -105,22 +90,16 @@ def generate_interview_report(transcript: str, language: str = "tr") -> Dict[str
     """
     Mülakat transkriptine göre rapor üretir.
     UI'daki kutulara direkt map edilebilecek bir dict döner.
-    
-    Raises:
-        ValueError: Transcript çok kısa veya boş
-        RuntimeError: Gemini API yapılandırma hatası
-        ImportError: google-generativeai paketi yüklü değil
-        Exception: Gemini API çağrısı veya JSON parse hatası
     """
     if not transcript or len(transcript.strip()) < MIN_TRANSCRIPT_LENGTH:
-        logger.warning("[Gemini Report] Transcript too short (len=%d, min=%d)", len(transcript.strip()) if transcript else 0, MIN_TRANSCRIPT_LENGTH)
-        raise ValueError(f"Transcript çok kısa. Minimum {MIN_TRANSCRIPT_LENGTH} karakter gereklidir.")
+        logger.warning("[Gemini Report] Transcript too short, returning empty report")
+        return _empty_report()
     
     try:
         model = _configure_gemini()
-    except (ImportError, RuntimeError) as e:
+    except (ImportError, ValueError, RuntimeError) as e:
         logger.error(f"[Gemini Report] Gemini client yapılandırma hatası: {e}")
-        raise RuntimeError(f"Gemini API yapılandırma hatası: {str(e)}") from e
+        return _empty_report()
     
     prompt = f"""
 Sen bir kıdemli teknik işe alım uzmanı gibi davranan yapay zekâsın.
@@ -181,11 +160,10 @@ MÜLAKAT TRANSKRİPTİ:
             data = json.loads(raw)
             return _normalize_report(data)
             
-    except json.JSONDecodeError as e:
-        logger.exception("[Gemini Report] JSON parse error")
-        logger.error("[Gemini Report] Raw response that failed to parse: %s", raw[:500])
-        raise ValueError(f"Gemini'den gelen yanıt JSON formatında değil: {str(e)}") from e
-    except Exception as e:
-        logger.exception("[Gemini Report] Unexpected error during report generation")
-        raise RuntimeError(f"Rapor üretilirken beklenmeyen hata: {str(e)}") from e
+    except json.JSONDecodeError:
+        logger.exception("[Gemini Report] JSON parse error, returning empty report")
+        return _empty_report()
+    except Exception:
+        logger.exception("[Gemini Report] Unexpected error, returning empty report")
+        return _empty_report()
 

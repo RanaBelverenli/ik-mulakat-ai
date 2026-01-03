@@ -1,10 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/lib/supabaseClient";
+
+// Backend URL
+const getBackendUrl = (): string => {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://ik-mulakat-ai.onrender.com';
+  return apiUrl.replace(/\/$/, '');
+};
 
 // Types
 interface Sentiment {
@@ -22,15 +27,6 @@ interface InterviewReport {
   improvements: string[];
 }
 
-interface InterviewSession {
-  id: string;
-  candidate_name: string;
-  interview_date: string;
-  score_10: number;
-  status_label: string;
-  report_json: InterviewReport;
-}
-
 const formatDuration = (seconds: number): string => {
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
@@ -39,62 +35,33 @@ const formatDuration = (seconds: number): string => {
 
 export default function InterviewReportPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const sessionId = searchParams.get("session_id");
-  
   const [report, setReport] = useState<InterviewReport | null>(null);
-  const [session, setSession] = useState<InterviewSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [duration, setDuration] = useState(0);
 
   useEffect(() => {
+    // Duration'ı localStorage'dan al
+    const savedDuration = localStorage.getItem("interview_duration");
+    if (savedDuration) {
+      setDuration(parseInt(savedDuration, 10));
+    }
+
+    // Transcript'i localStorage'dan al
+    const transcript = localStorage.getItem("interview_transcript");
+    
+    if (!transcript || transcript.trim().length < 20) {
+      setError("Transkript bulunamadı veya çok kısa. Lütfen mülakatı tamamlayın.");
+      setLoading(false);
+      return;
+    }
+
+    // API çağrısı yap
     const fetchReport = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        // Option A: URL'den session_id varsa Supabase'den çek
-        if (sessionId) {
-          const { data, error: supabaseError } = await supabase
-            .from("interview_sessions")
-            .select("*")
-            .eq("id", sessionId)
-            .single();
-
-          if (supabaseError) {
-            throw new Error(`Supabase hatası: ${supabaseError.message}`);
-          }
-
-          if (data && data.report_json) {
-            setReport(data.report_json);
-            setSession(data);
-            // Duration'ı hesapla (interview_date'den şimdiye kadar geçen süre)
-            const interviewDate = new Date(data.interview_date);
-            const now = new Date();
-            const diffSeconds = Math.floor((now.getTime() - interviewDate.getTime()) / 1000);
-            setDuration(Math.max(0, diffSeconds));
-            setLoading(false);
-            return;
-          }
-        }
-
-        // Option B: localStorage'dan transcript al ve API'ye gönder (fallback)
-        const transcript = localStorage.getItem("interview_transcript");
-        const savedDuration = localStorage.getItem("interview_duration");
-        
-        if (savedDuration) {
-          setDuration(parseInt(savedDuration, 10));
-        }
-
-        if (!transcript || transcript.trim().length < 20) {
-          setError("Transkript bulunamadı veya çok kısa. Lütfen mülakatı tamamlayın.");
-          setLoading(false);
-          return;
-        }
-
-        // Backend API'ye istek gönder
-        const { getBackendUrl } = await import('@/lib/backendUrl');
         const backendUrl = getBackendUrl();
         const response = await fetch(`${backendUrl}/api/v1/ai/report`, {
           method: "POST",
@@ -117,14 +84,14 @@ export default function InterviewReportPage() {
         console.log("[Interview Report] Rapor alındı:", data);
       } catch (err) {
         console.error("[Interview Report] Hata:", err);
-        setError(err instanceof Error ? err.message : "Rapor oluşturulurken bir hata oluştu. Lütfen tekrar deneyin.");
+        setError("Rapor oluşturulurken bir hata oluştu. Lütfen tekrar deneyin.");
       } finally {
         setLoading(false);
       }
     };
 
     fetchReport();
-  }, [sessionId]);
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">

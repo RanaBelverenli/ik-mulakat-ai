@@ -21,7 +21,6 @@ export default function InterviewAdminPage() {
   const [videoError, setVideoError] = useState<string | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [transcriptItems, setTranscriptItems] = useState<TranscriptItem[]>([]);
-  const [isFinishingInterview, setIsFinishingInterview] = useState(false);
   const mainVideoRef = useRef<HTMLVideoElement | null>(null);
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -52,96 +51,23 @@ export default function InterviewAdminPage() {
     return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   };
 
-  const handleInterviewAction = async () => {
+  const handleInterviewAction = () => {
     if (!isInterviewStarted) {
       setIsInterviewStarted(true);
       setDuration(0);
       return;
     }
 
-    // Mülakat bitişi - Gemini raporu oluştur ve Supabase'e kaydet
-    if (isFinishingInterview) {
-      return; // Zaten işlem devam ediyor
-    }
-
+    // Transcript'i localStorage'a kaydet (rapor sayfası için)
     const candidateTranscript = transcriptItems
       .filter((item) => item.role === "Aday")
       .map((item) => item.text)
       .join("\n");
     
-    if (!candidateTranscript || candidateTranscript.trim().length < 20) {
-      alert("Transkript çok kısa. Lütfen adayın konuşmasını bekleyin.");
-      return;
-    }
-
-    setIsFinishingInterview(true);
-
-    try {
-      // Backend API'ye istek gönder
-      const { getBackendUrl, logBackendUrl } = await import('@/lib/backendUrl');
-      logBackendUrl();
-      const backendUrl = getBackendUrl();
-      
-      const requestUrl = `${backendUrl}/api/v1/interviews`;
-      console.log('[Interview Admin] Requesting interview report:', requestUrl);
-      
-      const response = await fetch(requestUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          candidate_name: "Aday", // TODO: Gerçek aday adını buraya ekle
-          candidate_email: null,
-          transcript: candidateTranscript,
-          language: "tr",
-        }),
-      });
-
-      if (!response.ok) {
-        // Response body'yi oku
-        let errorData;
-        try {
-          const text = await response.text();
-          console.error("[Interview Admin] Backend error response:", {
-            status: response.status,
-            statusText: response.statusText,
-            body: text,
-          });
-          errorData = JSON.parse(text);
-        } catch (parseError) {
-          errorData = { detail: `HTTP ${response.status}: ${response.statusText}` };
-        }
-        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      console.log("[Interview Admin] Mülakat oturumu oluşturuldu:", data);
-
-      // Session ID'yi localStorage'a kaydet
-      localStorage.setItem("interview_session_id", data.id);
-      localStorage.setItem("interview_transcript", candidateTranscript);
-      localStorage.setItem("interview_duration", duration.toString());
-      
-      // Rapor sayfasına yönlendir
-      router.push(`/interview-report?session_id=${data.id}`);
-    } catch (error) {
-      console.error("[Interview Admin] Hata detayları:", {
-        error,
-        message: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-      
-      // Daha detaylı hata mesajı
-      let errorMessage = "Mülakat raporu oluşturulurken bir hata oluştu.";
-      if (error instanceof Error) {
-        errorMessage = error.message || errorMessage;
-      }
-      
-      alert(`${errorMessage}\n\nKonsolu kontrol edin (F12) daha fazla detay için.`);
-    } finally {
-      setIsFinishingInterview(false);
-    }
+    localStorage.setItem("interview_transcript", candidateTranscript);
+    localStorage.setItem("interview_duration", duration.toString());
+    
+    router.push("/interview-report");
   };
 
   // Initialize camera and microphone stream only once on mount
@@ -428,18 +354,13 @@ export default function InterviewAdminPage() {
               </button>
               <Button
                 onClick={handleInterviewAction}
-                disabled={isFinishingInterview}
                 className={`px-8 py-3 rounded-full font-medium flex items-center gap-2 ${
                   isInterviewStarted
                     ? "bg-red-600 hover:bg-red-700 text-white"
                     : "bg-purple-600 hover:bg-purple-700 text-white"
-                } ${isFinishingInterview ? "opacity-50 cursor-not-allowed" : ""}`}
+                }`}
               >
-                {isFinishingInterview 
-                  ? "⏳ Rapor oluşturuluyor..." 
-                  : isInterviewStarted 
-                  ? "⏹ Görüşmeyi Bitir" 
-                  : "▶ Görüşmeyi Başlat"}
+                {isInterviewStarted ? "⏹ Görüşmeyi Bitir" : "▶ Görüşmeyi Başlat"}
               </Button>
             </div>
           </div>
