@@ -3,50 +3,30 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import type { Session } from "@supabase/supabase-js";
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [authenticated, setAuthenticated] = useState(false);
+  const [session, setSession] = useState<Session | null>(null);
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        router.push("/login");
-        return;
-      } else {
-        setAuthenticated(true);
-      }
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
       setLoading(false);
-    };
+    });
 
-    checkAuth();
-
-    // Auth state değişikliklerini dinle
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_IN" && session) {
-        setAuthenticated(true);
-        setLoading(false);
-      } else if (event === "SIGNED_OUT") {
-        setAuthenticated(false);
-        router.push("/login");
-      } else if (!session) {
-        setAuthenticated(false);
-        router.push("/login");
-      } else {
-        setAuthenticated(true);
-        setLoading(false);
-      }
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setLoading(false);
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, [router]);
+  }, []);
 
   if (loading) {
     return (
@@ -56,7 +36,8 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!authenticated) {
+  if (!session) {
+    router.replace("/login");
     return null;
   }
 

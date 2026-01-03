@@ -50,56 +50,39 @@ const isAdminUser = async (user: User | null) => {
 export function AdminRoute({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState<any>(null);
   const [authorized, setAuthorized] = useState(false);
 
   useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
-
-    const verify = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-
-      if (!session?.user) {
-        router.push("/login");
-        return;
-      }
-
-      const allowed = await isAdminUser(session.user);
-
-      if (!allowed) {
-        router.push("/interview-info");
-        return;
-      }
-
-      setAuthorized(true);
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
       setLoading(false);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setLoading(false);
+    });
+
+    return () => {
+      subscription.unsubscribe();
     };
+  }, []);
 
-    verify();
-
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+  useEffect(() => {
+    if (!loading) {
       if (!session?.user) {
         setAuthorized(false);
-        router.push("/login");
         return;
       }
 
       isAdminUser(session.user).then((allowed) => {
-        if (!allowed) {
-          setAuthorized(false);
-          router.push("/interview-info");
-        } else {
-          setAuthorized(true);
-          setLoading(false);
-        }
+        setAuthorized(allowed);
       });
-    });
-
-    unsubscribe = () => listener.subscription.unsubscribe();
-
-    return () => {
-      unsubscribe?.();
-    };
-  }, [router]);
+    }
+  }, [loading, session]);
 
   if (loading) {
     return (
@@ -109,7 +92,13 @@ export function AdminRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
+  if (!session) {
+    router.replace("/login");
+    return null;
+  }
+
   if (!authorized) {
+    router.replace("/interview-info");
     return null;
   }
 
