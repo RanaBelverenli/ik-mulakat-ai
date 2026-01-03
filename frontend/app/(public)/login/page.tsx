@@ -113,18 +113,20 @@ export default function LoginPage() {
         }
       }
 
-      const targetPath = loginType === "admin" ? "/dashboard" : "/interview-info";
-
+      // Get user role and redirect accordingly
       if (data.user && data.session) {
-        // Session'ın hazır olduğundan emin olalım
-        // Kısa bir gecikme ile yönlendirme yapalım
-        setTimeout(() => {
-          window.location.href = targetPath;
-        }, 100);
-        // window.location.href kullanıldığı için loading state'i sıfırlamaya gerek yok
+        // Import getUserRole dynamically to avoid circular dependencies
+        const { getUserRole } = await import("@/lib/roles");
+        const role = await getUserRole(supabase, data.user.id);
+        
+        // Determine target path based on role
+        const targetPath = role === "admin" ? "/dashboard" : "/interview-info";
+        
+        // Use router.replace to avoid back button issues
+        router.replace(targetPath);
         return;
       } else if (data.user) {
-        // Session henüz hazır değilse biraz bekleyelim
+        // Session not ready yet, wait for it
         let attempts = 0;
         const maxAttempts = 10;
         
@@ -134,7 +136,10 @@ export default function LoginPage() {
           
           if (session) {
             clearInterval(interval);
-            window.location.href = targetPath;
+            const { getUserRole } = await import("@/lib/roles");
+            const role = await getUserRole(supabase, data.user.id);
+            const targetPath = role === "admin" ? "/dashboard" : "/interview-info";
+            router.replace(targetPath);
           } else if (attempts >= maxAttempts) {
             clearInterval(interval);
             setError("Giriş yapıldı ancak oturum başlatılamadı. Lütfen tekrar deneyin.");
@@ -142,7 +147,6 @@ export default function LoginPage() {
           }
         }, 200);
         
-        // Interval temizlenene kadar loading state'i koru
         return;
       } else {
         setError("Giriş başarısız. Lütfen tekrar deneyin.");

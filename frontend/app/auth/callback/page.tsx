@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { getUserRole } from "@/lib/roles";
 
 export default function AuthCallback() {
   const router = useRouter();
@@ -19,10 +20,19 @@ export default function AuthCallback() {
       }
 
       // Wait for session to be written to storage
-      await supabase.auth.getSession();
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        router.replace("/login");
+        return;
+      }
+
+      // Get user role and redirect accordingly
+      const role = await getUserRole(supabase, session.user.id);
+      const targetPath = role === "admin" ? "/dashboard" : "/interview-info";
 
       setTimeout(() => {
-        router.replace("/interview-info");
+        router.replace(targetPath);
       }, 200);
     };
 

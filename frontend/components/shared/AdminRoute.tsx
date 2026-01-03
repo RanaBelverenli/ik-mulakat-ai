@@ -2,50 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabaseClient";
-
-const DEFAULT_ADMIN_EMAILS = ["ranabelverenli@gmail.com"];
-
-const getAdminEmails = () => {
-  const rawEnv = process.env.NEXT_PUBLIC_ADMIN_EMAILS;
-  if (rawEnv && rawEnv.trim().length > 0) {
-    return rawEnv
-      .split(",")
-      .map((item) => item.trim().toLowerCase())
-      .filter(Boolean);
-  }
-  return DEFAULT_ADMIN_EMAILS;
-};
-
-const isAdminUser = async (user: User | null) => {
-  if (!user?.email) return false;
-
-  const email = user.email.toLowerCase();
-  const metadataRole =
-    typeof user.user_metadata?.role === "string"
-      ? user.user_metadata.role.toLowerCase()
-      : undefined;
-  const appMetadataRoles = Array.isArray(user.app_metadata?.roles)
-    ? user.app_metadata.roles.map((role: string) => role.toLowerCase())
-    : [];
-
-  if (
-    getAdminEmails().includes(email) ||
-    metadataRole === "admin" ||
-    appMetadataRoles.includes("admin")
-  ) {
-    return true;
-  }
-
-  const { data: adminRecord } = await supabase
-    .from("admins")
-    .select("email")
-    .eq("email", email)
-    .maybeSingle();
-
-  return !!adminRecord;
-};
+import { isAdminUser } from "@/lib/roles";
 
 export function AdminRoute({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -78,7 +36,7 @@ export function AdminRoute({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      isAdminUser(session.user).then((allowed) => {
+      isAdminUser(supabase, session.user).then((allowed) => {
         setAuthorized(allowed);
       });
     }
