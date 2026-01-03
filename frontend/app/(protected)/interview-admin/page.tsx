@@ -13,7 +13,7 @@ const SESSION_ID = "interview-room-1";
 
 export default function InterviewAdminPage() {
   const router = useRouter();
-  const [isInterviewStarted, setIsInterviewStarted] = useState(false);
+  const [isInterviewStarted, setIsInterviewStarted] = useState(true); // Otomatik başlat
   const [duration, setDuration] = useState(0); // seconds
   const [isMicOn, setIsMicOn] = useState(true);
   const [isVideoOn, setIsVideoOn] = useState(true);
@@ -52,13 +52,7 @@ export default function InterviewAdminPage() {
   };
 
   const handleInterviewAction = () => {
-    if (!isInterviewStarted) {
-      setIsInterviewStarted(true);
-      setDuration(0);
-      return;
-    }
-
-    // Transcript'i localStorage'a kaydet (rapor sayfası için)
+    // Mülakatı bitir ve rapor sayfasına yönlendir
     const candidateTranscript = transcriptItems
       .filter((item) => item.role === "Aday")
       .map((item) => item.text)
@@ -354,13 +348,9 @@ export default function InterviewAdminPage() {
               </button>
               <Button
                 onClick={handleInterviewAction}
-                className={`px-8 py-3 rounded-full font-medium flex items-center gap-2 ${
-                  isInterviewStarted
-                    ? "bg-red-600 hover:bg-red-700 text-white"
-                    : "bg-purple-600 hover:bg-purple-700 text-white"
-                }`}
+                className="px-8 py-3 rounded-full font-medium flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white"
               >
-                {isInterviewStarted ? "⏹ Görüşmeyi Bitir" : "▶ Görüşmeyi Başlat"}
+                ⏹ Mülakatı Bitir
               </Button>
             </div>
           </div>
