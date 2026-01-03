@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/hooks/useAuth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabaseClient";
-import type { Session } from "@supabase/supabase-js";
 
 const interviewFlow = [
   {
@@ -35,42 +35,26 @@ const tips = [
 
 export default function InterviewInfoPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [session, setSession] = useState<Session | null>(null);
+  const { user, loading } = useAuth();
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setLoading(false);
-    });
+    if (!loading && !user) {
+      router.push("/login");
+    }
+  }, [loading, user, router]);
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setLoading(false);
-    });
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
 
-    return () => subscription.unsubscribe();
-  }, []);
-
-  if (loading) {
+  if (loading || (!loading && !user)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-lg text-gray-700">Yükleniyor...</div>
       </div>
     );
   }
-
-  if (!session) {
-    router.replace("/login");
-    return null;
-  }
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
@@ -81,7 +65,7 @@ export default function InterviewInfoPage() {
             <h1 className="text-4xl font-bold text-gray-900 mt-3">Görüşmeye Başlamadan Önce</h1>
             <p className="text-lg text-gray-600 mt-4 max-w-3xl">
               Aşağıdaki adımlar mülakat sürecinde nelerle karşılaşacağınızı anlatır. Hazır olduğunuzda
-              "Mülakatı Başlat" butonuna tıklayarak görüntülü görüşmeyi başlatabilirsiniz.
+              “Mülakatı Başlat” butonuna tıklayarak görüntülü görüşmeyi başlatabilirsiniz.
             </p>
           </div>
           <Button
@@ -142,4 +126,5 @@ export default function InterviewInfoPage() {
     </div>
   );
 }
+
 

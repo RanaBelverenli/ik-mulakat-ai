@@ -60,7 +60,7 @@ export default function InterviewAdminPage() {
     
     localStorage.setItem("interview_transcript", candidateTranscript);
     localStorage.setItem("interview_duration", duration.toString());
-    
+
     router.push("/interview-report");
   };
 

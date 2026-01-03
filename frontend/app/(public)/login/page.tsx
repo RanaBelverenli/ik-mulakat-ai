@@ -113,22 +113,18 @@ export default function LoginPage() {
         }
       }
 
-      // Get user role and redirect accordingly
+      const targetPath = loginType === "admin" ? "/dashboard" : "/interview-info";
+
       if (data.user && data.session) {
-        // Import getUserRole dynamically to avoid circular dependencies
-        const { getUserRole } = await import("@/lib/roles");
-        const role = await getUserRole(supabase, data.user);
-        
-        console.log(`[Login] User role determined: ${role}, redirecting to ${role === "admin" ? "/dashboard" : "/interview-info"}`);
-        
-        // Determine target path based on role
-        const targetPath = role === "admin" ? "/dashboard" : "/interview-info";
-        
-        // Use router.replace to avoid back button issues
-        router.replace(targetPath);
+        // Session'ın hazır olduğundan emin olalım
+        // Kısa bir gecikme ile yönlendirme yapalım
+        setTimeout(() => {
+          window.location.href = targetPath;
+        }, 100);
+        // window.location.href kullanıldığı için loading state'i sıfırlamaya gerek yok
         return;
       } else if (data.user) {
-        // Session not ready yet, wait for it
+        // Session henüz hazır değilse biraz bekleyelim
         let attempts = 0;
         const maxAttempts = 10;
         
@@ -138,11 +134,7 @@ export default function LoginPage() {
           
           if (session) {
             clearInterval(interval);
-            const { getUserRole } = await import("@/lib/roles");
-            const role = await getUserRole(supabase, data.user);
-            const targetPath = role === "admin" ? "/dashboard" : "/interview-info";
-            console.log(`[Login] User role determined (delayed): ${role}, redirecting to ${targetPath}`);
-            router.replace(targetPath);
+            window.location.href = targetPath;
           } else if (attempts >= maxAttempts) {
             clearInterval(interval);
             setError("Giriş yapıldı ancak oturum başlatılamadı. Lütfen tekrar deneyin.");
@@ -150,6 +142,7 @@ export default function LoginPage() {
           }
         }, 200);
         
+        // Interval temizlenene kadar loading state'i koru
         return;
       } else {
         setError("Giriş başarısız. Lütfen tekrar deneyin.");
