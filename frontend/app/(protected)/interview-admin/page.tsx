@@ -384,60 +384,6 @@ export default function InterviewAdminPage() {
             transcriptItems={transcriptItems}
           />
 
-          <Card className="p-4 bg-white">
-            <div className="flex items-center gap-2 mb-4">
-              <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-                />
-              </svg>
-              <h2 className="text-lg font-semibold text-gray-900">Yapay Zekâ Skorlaması</h2>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-gray-700">İletişim Becerileri</span>
-                  <span className="font-medium text-gray-900">8.5/10</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div className="bg-purple-600 h-2 rounded-full" style={{ width: "85%" }}></div>
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-gray-700">Teknik Bilgi</span>
-                  <span className="font-medium text-gray-900">7.8/10</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div className="bg-purple-600 h-2 rounded-full" style={{ width: "78%" }}></div>
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-gray-700">Problem Çözme</span>
-                  <span className="font-medium text-gray-900">8.2/10</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div className="bg-purple-600 h-2 rounded-full" style={{ width: "82%" }}></div>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-4 bg-green-50 border-2 border-green-200">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Yapay Zekâ Önerisi</h2>
-            <div className="text-center">
-              <Button className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-full font-medium mb-3">
-                Güçlü Aday
-              </Button>
-              <p className="text-sm text-gray-700">
-                Aday mülakat boyunca güçlü iletişim kurdu ve teknik becerilerini net biçimde gösterdi. Genel duygu analizi pozitif yönde.
-              </p>
-            </div>
-          </Card>
         </div>
       </div>
     </div>
