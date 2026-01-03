@@ -117,7 +117,9 @@ export default function LoginPage() {
       if (data.user && data.session) {
         // Import getUserRole dynamically to avoid circular dependencies
         const { getUserRole } = await import("@/lib/roles");
-        const role = await getUserRole(supabase, data.user.id);
+        const role = await getUserRole(supabase, data.user);
+        
+        console.log(`[Login] User role determined: ${role}, redirecting to ${role === "admin" ? "/dashboard" : "/interview-info"}`);
         
         // Determine target path based on role
         const targetPath = role === "admin" ? "/dashboard" : "/interview-info";
@@ -137,8 +139,9 @@ export default function LoginPage() {
           if (session) {
             clearInterval(interval);
             const { getUserRole } = await import("@/lib/roles");
-            const role = await getUserRole(supabase, data.user.id);
+            const role = await getUserRole(supabase, data.user);
             const targetPath = role === "admin" ? "/dashboard" : "/interview-info";
+            console.log(`[Login] User role determined (delayed): ${role}, redirecting to ${targetPath}`);
             router.replace(targetPath);
           } else if (attempts >= maxAttempts) {
             clearInterval(interval);

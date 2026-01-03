@@ -15,9 +15,12 @@ export type UserRole = "admin" | "user";
  */
 export async function getUserRole(
   supabase: SupabaseClient,
-  userId: string
+  user: User | { id: string; email?: string | null; user_metadata?: any; app_metadata?: any }
 ): Promise<UserRole> {
   try {
+    const userId = typeof user === "string" ? user : user.id;
+    const userEmail = typeof user === "string" ? null : user.email;
+
     // First, try to get role from profiles table (if it exists)
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
@@ -28,6 +31,7 @@ export async function getUserRole(
     if (!profileError && profile?.role) {
       const role = String(profile.role).toLowerCase().trim();
       if (role === "admin") {
+        console.log(`[getUserRole] Admin role found in profiles table for user ${userId}`);
         return "admin";
       }
       if (role === "user") {
@@ -36,39 +40,60 @@ export async function getUserRole(
     }
 
     // If profiles table doesn't exist or no role found, check admins table
-    const { data: user } = await supabase.auth.getUser();
-    if (user?.user?.email) {
-      const { data: adminRecord } = await supabase
+    if (userEmail) {
+      const { data: adminRecord, error: adminError } = await supabase
         .from("admins")
         .select("email")
-        .eq("email", user.user.email.toLowerCase())
+        .eq("email", userEmail.toLowerCase())
         .maybeSingle();
 
+      if (adminError && adminError.code !== "PGRST116") {
+        console.warn("[getUserRole] Error checking admins table:", adminError.message);
+      }
+
       if (adminRecord) {
+        console.log(`[getUserRole] Admin found in admins table for email ${userEmail}`);
         return "admin";
       }
     }
 
     // Check user metadata as fallback
-    if (user?.user) {
+    if (typeof user !== "string") {
       const metadataRole =
-        typeof user.user.user_metadata?.role === "string"
-          ? user.user.user_metadata.role.toLowerCase().trim()
+        typeof user.user_metadata?.role === "string"
+          ? user.user_metadata.role.toLowerCase().trim()
           : undefined;
 
-      const appMetadataRoles = Array.isArray(user.user.app_metadata?.roles)
-        ? user.user.app_metadata.roles.map((r: string) => String(r).toLowerCase().trim())
+      const appMetadataRoles = Array.isArray(user.app_metadata?.roles)
+        ? user.app_metadata.roles.map((r: string) => String(r).toLowerCase().trim())
         : [];
 
       if (metadataRole === "admin" || appMetadataRoles.includes("admin")) {
+        console.log(`[getUserRole] Admin role found in metadata for user ${userId}`);
         return "admin";
       }
+    }
+
+    // Check environment variable admin emails as last fallback
+    const DEFAULT_ADMIN_EMAILS = ["ranabelverenli@gmail.com"];
+    const rawEnvAdmins = process.env.NEXT_PUBLIC_ADMIN_EMAILS;
+    const ADMIN_EMAILS = (
+      rawEnvAdmins && rawEnvAdmins.trim().length > 0
+        ? rawEnvAdmins.split(",")
+        : DEFAULT_ADMIN_EMAILS
+    )
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean);
+
+    if (userEmail && ADMIN_EMAILS.includes(userEmail.toLowerCase())) {
+      console.log(`[getUserRole] Admin email found in env variable for ${userEmail}`);
+      return "admin";
     }
 
     // Default to 'user'
     if (process.env.NODE_ENV === "development") {
       console.warn(
-        `[getUserRole] No role found for user ${userId}, defaulting to 'user'`
+        `[getUserRole] No admin role found for user ${userId} (${userEmail || "no email"}), defaulting to 'user'`
       );
     }
 

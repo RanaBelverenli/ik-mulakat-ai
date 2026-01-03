@@ -28,8 +28,10 @@ export default function AuthCallback() {
       }
 
       // Get user role and redirect accordingly
-      const role = await getUserRole(supabase, session.user.id);
+      const role = await getUserRole(supabase, session.user);
       const targetPath = role === "admin" ? "/dashboard" : "/interview-info";
+
+      console.log(`[Auth Callback] User role determined: ${role}, redirecting to ${targetPath}`);
 
       setTimeout(() => {
         router.replace(targetPath);
