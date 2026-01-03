@@ -113,7 +113,7 @@ export async function isAdminUser(
 ): Promise<boolean> {
   if (!user?.id) return false;
 
-  const role = await getUserRole(supabase, user.id);
+  const role = await getUserRole(supabase, user);
   return role === "admin";
 }
 
