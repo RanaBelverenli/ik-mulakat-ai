@@ -9,29 +9,21 @@ export default function AuthCallback() {
 
   useEffect(() => {
     const handleAuth = async () => {
-      try {
-        // OAuth callback URL'den code'u al ve session'a çevir
-        const { error } = await supabase.auth.exchangeCodeForSession(
-          window.location.href
-        );
+      const { error } = await supabase.auth.exchangeCodeForSession(
+        window.location.href
+      );
 
-        if (error) {
-          console.error("[Auth Callback] OAuth exchange hatası:", error);
-          router.replace("/login?error=auth_failed");
-          return;
-        }
-
-        // Session'ın hydrate edilmesini bekle
-        await supabase.auth.getSession();
-
-        // Kısa bir delay ekle (session hydration için)
-        setTimeout(() => {
-          router.replace("/dashboard");
-        }, 100);
-      } catch (err) {
-        console.error("[Auth Callback] Beklenmeyen hata:", err);
-        router.replace("/login?error=unexpected");
+      if (error) {
+        router.replace("/login");
+        return;
       }
+
+      // Wait for session to be written to storage
+      await supabase.auth.getSession();
+
+      setTimeout(() => {
+        router.replace("/interview-info");
+      }, 200);
     };
 
     handleAuth();
