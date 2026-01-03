@@ -29,7 +29,6 @@ const interviewFlow = [
 const tips = [
   "Arka planınızı sade tutun ve iyi aydınlatılmış bir ortamda olun.",
   "Soruları yanıtlarken önce düşüncelerinizi kısaca organize edin.",
-  "Mimik ve beden dilinizi doğal tutarak kameraya bakmaya çalışın.",
   "Sürenizi verimli kullanın; gerektiğinde kısa notlar alabilirsiniz.",
 ];
 
